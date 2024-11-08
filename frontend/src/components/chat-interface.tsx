@@ -39,7 +39,8 @@ const ChatInterface = () => {
         isLoading: configLoading,
         error: configError,
         updateConfig,
-        validateConfig
+        validateConfig,
+        switchProvider
     } = useModelConfig();
 
     // Local UI state
@@ -169,14 +170,17 @@ const ChatInterface = () => {
                                 <label className="text-sm font-medium">Provider</label>
                                 <Select
                                     value={modelConfig.provider}
-                                    onValueChange={(value: 'claude' | 'chatgpt' | 'ollama') => handleModelConfigUpdate({
-                                        provider: value,
-                                        model: value === 'claude' ? 'claude-3-opus' :
-                                            value === 'chatgpt' ? 'gpt-4' : '',
-                                        apiKey: '', // Reset API key when changing provider
-                                        ollamaModel: value === 'ollama' ? modelConfig.ollamaModel : undefined,
-                                        temperature: modelConfig.temperature // Preserve temperature
-                                    })}
+                                    onValueChange={(value: 'claude' | 'chatgpt' | 'ollama') => {
+                                        switchProvider(value);
+                                        handleModelConfigUpdate({
+                                            provider: value,
+                                            model: value === 'claude' ? 'claude-3-opus' :
+                                                value === 'chatgpt' ? 'gpt-4' : '',
+                                            apiKey: '', // Reset API key when changing provider
+                                            ollamaModel: value === 'ollama' ? modelConfig.ollamaModel : undefined,
+                                            temperature: modelConfig.temperature // Preserve temperature
+                                        });
+                                    }}
                                 >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select Provider"/>
