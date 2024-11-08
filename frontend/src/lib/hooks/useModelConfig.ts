@@ -1,7 +1,6 @@
-// src/lib/hooks/useModelConfig.ts
-import { useEffect, useState } from "react";
-import { modelApi, ModelConfig } from "@/lib/api";
-import { Provider, ClaudeModel, ChatGPTModel } from "@/lib/types";
+import {useEffect, useState} from "react";
+import {modelApi, ModelConfig} from "@/lib/api";
+import {Provider} from "@/lib/types";
 
 const defaultConfigs: Record<Provider, ModelConfig> = {
     claude: {
@@ -24,84 +23,95 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
     }
 };
 
+export interface ModelConfigError {
+    message: string;
+    details?: string[];
+}
+
 export function useModelConfig() {
-    // Track configs for all providers
     const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(defaultConfigs);
-    // Track active provider
     const [activeProvider, setActiveProvider] = useState<Provider>('claude');
     const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<ModelConfigError | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
-    // Get current active config - this maintains the existing API surface
     const modelConfig = configs[activeProvider];
 
-    // Load configs for all providers
     const loadConfig = async () => {
         try {
             setIsLoading(true);
             const allConfigs = await modelApi.getConfig();
-
-            // Convert array of configs to record
-            const newConfigs = { ...defaultConfigs };
+            const newConfigs = {...defaultConfigs};
             allConfigs.forEach((config: ModelConfig) => {
                 newConfigs[config.provider as Provider] = config;
             });
-
             setConfigs(newConfigs);
+            setError(null);
         } catch (err) {
-            setError('Failed to load model configuration');
-            console.error(err);
+            setError({message: 'Failed to load model configuration'});
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Load initial configs
     useEffect(() => {
         loadConfig();
     }, []);
 
-    // Update config for specific provider
-    const updateConfig = async (config: ModelConfig) => {
+    const saveConfig = async (config: ModelConfig): Promise<boolean> => {
         try {
-            setIsLoading(true);
+            setIsSaving(true);
+            setError(null);
+
+            // First validate
+            const validationResponse = await modelApi.validateConfig(config);
+            if (!validationResponse.valid) {
+                setError({
+                    message: 'Configuration validation failed',
+                    details: validationResponse.issues
+                });
+                return false;
+            }
+
+            // Then save if valid
             await modelApi.saveConfig(config);
             setConfigs(prev => ({
                 ...prev,
                 [config.provider]: config
             }));
+            return true;
         } catch (err) {
-            setError('Failed to update model configuration');
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    // Validate config for specific provider
-    const validateConfig = async (config: ModelConfig) => {
-        try {
-            return await modelApi.validateConfig(config);
-        } catch (err) {
-            setError('Failed to validate model configuration');
-            console.error(err);
+            setError({
+                message: 'Failed to save configuration',
+                details: err.response?.data?.issues || [err.message]
+            });
             return false;
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    // Switch active provider
+    const updateDraft = (updates: Partial<ModelConfig>) => {
+        setConfigs(prev => ({
+            ...prev,
+            [activeProvider]: {...prev[activeProvider], ...updates}
+        }));
+    };
+
     const switchProvider = (provider: Provider) => {
         setActiveProvider(provider);
+        setError(null);
     };
 
     return {
-        modelConfig, // Current active config - maintains existing API surface
-        configs, // All provider configs
+        modelConfig,
+        configs,
         activeProvider,
         isLoading,
+        isSaving,
         error,
-        updateConfig,
-        validateConfig,
+        saveConfig,
+        updateDraft,
         switchProvider,
     };
 }

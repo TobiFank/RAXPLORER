@@ -7,7 +7,7 @@ import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@/components/ui/select';
 import {Input} from '@/components/ui/input';
-import {Alert} from '@/components/ui/alert';
+import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
@@ -37,10 +37,13 @@ const ChatInterface = () => {
     const {
         modelConfig,
         isLoading: configLoading,
+        isSaving,
         error: configError,
         updateConfig,
         validateConfig,
-        switchProvider
+        switchProvider,
+        updateDraft,
+        saveConfig
     } = useModelConfig();
 
     // Local UI state
@@ -72,7 +75,7 @@ const ChatInterface = () => {
 
     // Message handling
     const handleSendMessage = async () => {
-        if (!inputText.trim() || !validateModelSettings()) return;
+        if (!inputText.trim()) return;
 
         await sendMessage(inputText, modelConfig);
         setInputText('');
@@ -172,13 +175,13 @@ const ChatInterface = () => {
                                     value={modelConfig.provider}
                                     onValueChange={(value: 'claude' | 'chatgpt' | 'ollama') => {
                                         switchProvider(value);
-                                        handleModelConfigUpdate({
+                                        updateDraft({
                                             provider: value,
                                             model: value === 'claude' ? 'claude-3-opus' :
                                                 value === 'chatgpt' ? 'gpt-4' : '',
                                             apiKey: '', // Reset API key when changing provider
                                             ollamaModel: value === 'ollama' ? modelConfig.ollamaModel : undefined,
-                                            temperature: modelConfig.temperature // Preserve temperature
+                                            temperature: modelConfig.temperature
                                         });
                                     }}
                                 >
@@ -202,8 +205,7 @@ const ChatInterface = () => {
                                             type="password"
                                             placeholder={`Enter your ${modelConfig.provider === 'claude' ? 'Anthropic' : 'OpenAI'} API key`}
                                             value={modelConfig.apiKey || ''}
-                                            onChange={(e) => handleModelConfigUpdate({
-                                                ...modelConfig,
+                                            onChange={(e) => updateDraft({
                                                 apiKey: e.target.value
                                             })}
                                         />
@@ -218,8 +220,7 @@ const ChatInterface = () => {
                                         <label className="text-sm font-medium">Model</label>
                                         <Select
                                             value={modelConfig.model}
-                                            onValueChange={(value) => handleModelConfigUpdate({
-                                                ...modelConfig,
+                                            onValueChange={(value) => updateDraft({
                                                 model: value
                                             })}
                                         >
@@ -254,7 +255,7 @@ const ChatInterface = () => {
                                     <Input
                                         placeholder="e.g., llama2, mistral, codellama"
                                         value={modelConfig.ollamaModel || ''}
-                                        onChange={(e) => handleModelConfigUpdate({
+                                        onChange={(e) => updateDraft({
                                             ollamaModel: e.target.value
                                         })}
                                     />
@@ -274,26 +275,42 @@ const ChatInterface = () => {
                                         max="2"
                                         step="0.1"
                                         value={modelConfig.temperature}
-                                        onChange={(e) => handleModelConfigUpdate({
+                                        onChange={(e) => updateDraft({
                                             temperature: parseFloat(e.target.value)
                                         })}
                                         className="flex-1"
                                     />
                                     <span className="text-sm w-12 text-right">
-                                        {modelConfig.temperature.toFixed(1)}
-                                    </span>
+                        {modelConfig.temperature.toFixed(1)}
+                    </span>
                                 </div>
                                 <p className="text-xs text-gray-500">
                                     Controls randomness: 0 is focused, 2 is more creative
                                 </p>
                             </div>
 
-                            {/* Validation Alert */}
-                            {!isModelValid && (
-                                <Alert variant="destructive" className="mt-4">
-                                    {modelConfig.provider === 'ollama'
-                                        ? 'Please enter a valid model name'
-                                        : 'Please enter your API key'}
+                            {/* Save Button */}
+                            <Button
+                                className="w-full"
+                                onClick={() => saveConfig(modelConfig)}
+                                disabled={isSaving}
+                            >
+                                {isSaving ? 'Saving...' : 'Save Configuration'}
+                            </Button>
+
+                            {/* Error Display */}
+                            {configError && (
+                                <Alert variant="destructive">
+                                    <AlertTitle>{configError.message}</AlertTitle>
+                                    {configError.details && configError.details.length > 0 && (
+                                        <AlertDescription>
+                                            <ul className="list-disc pl-4 mt-2">
+                                                {configError.details.map((detail, index) => (
+                                                    <li key={index}>{detail}</li>
+                                                ))}
+                                            </ul>
+                                        </AlertDescription>
+                                    )}
                                 </Alert>
                             )}
                         </CardContent>
