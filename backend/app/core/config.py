@@ -26,6 +26,16 @@ class Settings(BaseSettings):
     # Security
     RATE_LIMIT_PER_MINUTE: int = 100
 
+    # Milvus Configuration
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
+    MILVUS_COLLECTION: str = "document_chunks"
+    MILVUS_VECTOR_DIM: int = 4096  # Matches Llama2 embedding dimension
+
+    # Vector search configuration
+    VECTOR_SIMILARITY_METRIC: str = "COSINE"
+    VECTOR_TOP_K: int = 3
+
     class Config:
         env_file = ".env"
 

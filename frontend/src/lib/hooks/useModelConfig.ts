@@ -7,6 +7,8 @@ export function useModelConfig() {
         provider: 'claude',
         model: 'claude-3-opus',
         temperature: 0.7,
+        apiKey: '',
+        ollamaModel: '',
     });
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

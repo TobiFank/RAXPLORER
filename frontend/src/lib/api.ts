@@ -34,8 +34,10 @@ export interface ModelConfig {
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_V1_PREFIX = '/api/v1';
+
 const api = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: `${API_BASE_URL}${API_V1_PREFIX}`,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -43,43 +45,34 @@ const api = axios.create({
 
 // Chat API
 export const chatApi = {
-    // Chat Management
+    // Chat Management endpoints remain the same
     createChat: async (): Promise<Chat> => {
-        const response = await api.post('/chats');
+        const response = await api.post('/chat/chats');
         return response.data;
     },
 
     getChats: async (): Promise<Chat[]> => {
-        const response = await api.get('/chats');
+        const response = await api.get('/chat/chats');
         return response.data;
     },
 
     getChat: async (chatId: string): Promise<Chat> => {
-        const response = await api.get(`/chats/${chatId}`);
+        const response = await api.get(`/chat/chats/${chatId}`);
         return response.data;
     },
 
     deleteChat: async (chatId: string): Promise<void> => {
-        await api.delete(`/chats/${chatId}`);
+        await api.delete(`/chat/chats/${chatId}`);
     },
 
     updateChatTitle: async (chatId: string, title: string): Promise<Chat> => {
-        const response = await api.patch(`/chats/${chatId}`, { title });
+        const response = await api.patch(`/chat/chats/${chatId}`, { title });
         return response.data;
     },
 
-    // Message Management
-    sendMessage: async (chatId: string, content: string, modelConfig: ModelConfig): Promise<ChatMessage> => {
-        const response = await api.post(`/chats/${chatId}/messages`, {
-            content,
-            modelConfig,
-        });
-        return response.data;
-    },
-
-    // Streaming version of sendMessage
-    sendMessageStream: async function* (chatId: string, content: string, modelConfig: ModelConfig) {
-        const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages/stream`, {
+    // Single message endpoint that handles streaming
+    sendMessage: async function* (chatId: string, content: string, modelConfig: ModelConfig) {
+        const response = await fetch(`${API_BASE_URL}${API_V1_PREFIX}/chat/chats/${chatId}/messages`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

@@ -1,6 +1,7 @@
 # app/main.py
-from app.api import chat
+from app.api.v1 import chat, files, models  # Add models import
 from app.core.config import settings
+from app.core.middleware import ErrorHandlingMiddleware
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -19,8 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Error handling middleware
+app.add_middleware(ErrorHandlingMiddleware)
+
 # Include routers
-app.include_router(chat.router, prefix=settings.API_V1_STR)
+app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat")
+app.include_router(files.router, prefix=f"{settings.API_V1_STR}/files")
+app.include_router(models.router, prefix=f"{settings.API_V1_STR}/model")  # Add models router
 
 
 @app.get("/")

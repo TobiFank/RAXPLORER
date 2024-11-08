@@ -15,6 +15,7 @@ class ModelSettings(BaseModel):
     temperature: float = Field(ge=0.0, le=1.0)
 
 class MessageCreate(MessageBase):
+    content: str
     modelConfig: ModelSettings  # Changed from model_config to ai_config
 
 class MessageResponse(MessageBase):

@@ -1,3 +1,4 @@
+# backend/deploy/docker/Dockerfile
 # Base image
 FROM python:3.11-slim as python-base
 
@@ -27,19 +28,16 @@ RUN apt-get update \
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # Set working directory
-WORKDIR $PYSETUP_PATH
+WORKDIR /app
 
-# Copy poetry files
+# Copy project files
 COPY pyproject.toml poetry.lock ./
+COPY app ./app
+COPY alembic.ini ./
+COPY alembic ./alembic
 
 # Install dependencies
 RUN poetry install --no-root --no-dev
 
-# Copy application code
-COPY . .
-
-# Install application
-RUN poetry install --no-dev
-
-# Run application
+# Set the default command
 CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

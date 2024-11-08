@@ -98,7 +98,7 @@ export function useChat() {
             setMessages(prev => [...prev, userMessage]);
 
             // Get streaming response
-            const stream = chatApi.sendMessageStream(activeChat, content, modelConfig);
+            const stream = chatApi.sendMessage(activeChat, content, modelConfig);
             let assistantMessage = '';
 
             // Create placeholder for assistant message
