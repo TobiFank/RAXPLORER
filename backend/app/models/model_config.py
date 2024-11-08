@@ -12,4 +12,5 @@ class ModelConfig(Base):
     provider = Column(String, nullable=False)
     temperature = Column(Float, nullable=False, default=0.7)
     extra_params = Column(JSON, nullable=True)
+    ollamaModel = Column(String, nullable=True)  # Add this field
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
