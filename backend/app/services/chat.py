@@ -1,23 +1,24 @@
 # app/services/chat.py
-from datetime import datetime
 import uuid
-from typing import List, Optional
-from sqlalchemy.orm import Session
-from fastapi import HTTPException
+from datetime import datetime
+from typing import List, Optional, AsyncGenerator
 
 from app.models.chat import Chat, Message
-from app.schemas.chat import ChatCreate, ChatUpdate, MessageCreate
-from app.services.model import ModelService
+from app.schemas.chat import ChatCreate, ChatUpdate
+from app.services.llm.base import LLMConfig
+from app.services.llm.factory import create_llm_service
+from fastapi import HTTPException
+from sqlalchemy.orm import Session
+
 
 class ChatService:
     def __init__(self, db: Session):
         self.db = db
-        self.model_service = ModelService()
 
     def create_chat(self, chat_create: ChatCreate) -> Chat:
         chat = Chat(
             id=str(uuid.uuid4()),
-            title=chat_create.title,
+            title=chat_create.title or "New Chat",
             created_at=datetime.utcnow()
         )
         self.db.add(chat)
@@ -47,7 +48,13 @@ class ChatService:
         self.db.delete(chat)
         self.db.commit()
 
-    async def create_message(self, chat_id: str, message_create: MessageCreate) -> Message:
+    async def create_message(
+            self,
+            chat_id: str,
+            content: str,
+            model_config: dict
+    ) -> AsyncGenerator[str, None]:
+        """Create a message and stream the AI response"""
         chat = self.get_chat(chat_id)
 
         # Create user message
@@ -55,32 +62,70 @@ class ChatService:
             id=str(uuid.uuid4()),
             chat_id=chat_id,
             role="user",
-            content=message_create.content,
+            content=content,
             timestamp=datetime.utcnow(),
-            model_provider=message_create.ai_config.provider,  # Changed from model_config to ai_config
-            model_name=message_create.ai_config.model,
-            temperature=message_create.ai_config.temperature
+            model_provider=model_config["provider"],
+            model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config[
+                "model"],
+            temperature=model_config["temperature"]
         )
         self.db.add(user_message)
-
-        # Generate AI response
-        response_content = await self.model_service.generate_response(
-            message_create.content,
-            message_create.ai_config  # Changed from model_config to ai_config
-        )
-
-        # Create assistant message
-        assistant_message = Message(
-            id=str(uuid.uuid4()),
-            chat_id=chat_id,
-            role="assistant",
-            content=response_content,
-            timestamp=datetime.utcnow(),
-            model_provider=message_create.ai_config.provider,  # Changed from model_config to ai_config
-            model_name=message_create.ai_config.model,
-            temperature=message_create.ai_config.temperature
-        )
-        self.db.add(assistant_message)
-
         self.db.commit()
-        return assistant_message
+
+        # Initialize appropriate LLM service
+        llm_service = await create_llm_service(
+            provider=model_config["provider"],
+            api_key=model_config.get("apiKey"),
+            model=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config["model"]
+        )
+
+        # Prepare LLM config
+        llm_config = LLMConfig(
+            model=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config["model"],
+            temperature=model_config["temperature"],
+            top_p=1.0,
+            stop_sequences=[],
+            extra_params={}
+        )
+
+        # Initialize response content
+        response_content = ""
+
+        # Stream response from LLM
+        try:
+            async for chunk in llm_service.generate_stream(content, llm_config):
+                response_content += chunk
+                yield chunk
+
+            # After streaming is complete, save the assistant message
+            assistant_message = Message(
+                id=str(uuid.uuid4()),
+                chat_id=chat_id,
+                role="assistant",
+                content=response_content,
+                timestamp=datetime.utcnow(),
+                model_provider=model_config["provider"],
+                model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config[
+                    "model"],
+                temperature=model_config["temperature"]
+            )
+            self.db.add(assistant_message)
+            self.db.commit()
+
+        except Exception as e:
+            # If there's an error, we should still save what we have
+            if response_content:
+                assistant_message = Message(
+                    id=str(uuid.uuid4()),
+                    chat_id=chat_id,
+                    role="assistant",
+                    content=response_content,
+                    timestamp=datetime.utcnow(),
+                    model_provider=model_config["provider"],
+                    model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else
+                    model_config["model"],
+                    temperature=model_config["temperature"]
+                )
+                self.db.add(assistant_message)
+                self.db.commit()
+            raise HTTPException(status_code=500, detail=str(e))

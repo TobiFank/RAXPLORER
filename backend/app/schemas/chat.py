@@ -1,22 +1,29 @@
 # app/schemas/chat.py
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
-from uuid import UUID
 
-class MessageBase(BaseModel):
-    content: str
+from pydantic import BaseModel, Field
+
 
 class ModelSettings(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     api_key: Optional[str] = None
-    model: str
-    ollama_model: Optional[str] = None
-    temperature: float = Field(ge=0.0, le=1.0)
+    model: str = ""
+    ollama_model: Optional[str] = None  # Changed from ollamaModel to match Python naming
+    temperature: float = Field(0.7, ge=0.0, le=1.0)
+
+
+class MessageBase(BaseModel):
+    content: str
+
 
 class MessageCreate(MessageBase):
-    content: str
-    modelConfig: ModelSettings  # Changed from model_config to ai_config
+    modelConfig: ModelSettings  # Changed from model_config to match frontend
+
+    class Config:
+        populate_by_name = True
+        alias_generator = None
+
 
 class MessageResponse(MessageBase):
     id: str
@@ -26,14 +33,18 @@ class MessageResponse(MessageBase):
     class Config:
         from_attributes = True
 
+
 class ChatBase(BaseModel):
     title: str = "New Chat"
 
+
 class ChatCreate(ChatBase):
-    pass
+    title: Optional[str] = "New Chat"
+
 
 class ChatUpdate(ChatBase):
     pass
+
 
 class ChatResponse(ChatBase):
     id: str
@@ -42,6 +53,7 @@ class ChatResponse(ChatBase):
 
     class Config:
         from_attributes = True
+
 
 class ChatListResponse(ChatBase):
     id: str

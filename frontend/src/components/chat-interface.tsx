@@ -75,28 +75,58 @@ const ChatInterface = () => {
 
     // Message handling
     const handleSendMessage = async () => {
-        if (!inputText.trim()) return;
+        console.log("Send button clicked");
+        console.log("Input text:", inputText);
+        console.log("Current model config:", modelConfig);
+        console.log("Chat loading state:", chatLoading);
+        console.log("Model settings valid:", validateModelSettings());
 
-        await sendMessage(inputText, modelConfig);
-        setInputText('');
+        if (!inputText.trim()) {
+            console.log("Input text is empty, returning");
+            return;
+        }
+
+        try {
+            console.log("Attempting to send message...");
+            await sendMessage(inputText, modelConfig);
+            console.log("Message sent successfully");
+            setInputText('');
+        } catch (error) {
+            console.error("Error sending message:", error);
+        }
     };
+
 
     // Model validation
     const validateModelSettings = useCallback(() => {
-        if (modelConfig.provider === 'ollama') {
-            return modelConfig.ollamaModel?.trim() !== '';
-        } else {
-            return modelConfig.apiKey?.trim() !== '';
-        }
+        const isValid = modelConfig.provider === 'ollama'
+            ? modelConfig.ollamaModel?.trim() !== ''
+            : modelConfig.apiKey?.trim() !== '';
+
+        console.log("Model settings validation:", {
+            provider: modelConfig.provider,
+            ollamaModel: modelConfig.ollamaModel,
+            isValid: isValid
+        });
+
+        return isValid;
     }, [modelConfig]);
 
-    // Update model config
-    const handleModelConfigUpdate = async (updates: Partial<typeof modelConfig>) => {
-        const newConfig = {...modelConfig, ...updates};
-        const isValid = await validateConfig(newConfig);
-        setIsModelValid(isValid);
-        if (isValid) {
-            await updateConfig(newConfig);
+    const isButtonDisabled = chatLoading || !validateModelSettings() || !inputText.trim();
+    console.log("Send button disabled state:", {
+        chatLoading,
+        modelSettingsValid: validateModelSettings(),
+        hasInputText: !!inputText.trim(),
+        finalDisabledState: isButtonDisabled
+    });
+
+    const handleNewChat = async () => {
+        console.log("Creating new chat");
+        try {
+            await createChat();
+            console.log("Chat created successfully");
+        } catch (error) {
+            console.error("Failed to create chat:", error);
         }
     };
 
@@ -107,7 +137,7 @@ const ChatInterface = () => {
                 {/* Chat History */}
                 <Button
                     className="w-full mb-4 flex items-center gap-2"
-                    onClick={createChat}
+                    onClick={handleNewChat}
                     disabled={chatLoading}
                 >
                     <Plus size={16}/>
@@ -428,35 +458,51 @@ const ChatInterface = () => {
                     <div className="flex gap-2">
                         <Textarea
                             value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
+                            onChange={(e) => {
+                                console.log("Input changed:", e.target.value);
+                                setInputText(e.target.value);
+                            }}
                             placeholder="Type your message..."
                             className="flex-1"
                             rows={1}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
+                                    console.log("Enter key pressed");
                                     e.preventDefault();
                                     handleSendMessage();
                                 }
                             }}
-                            disabled={chatLoading || !isModelValid}
+                            disabled={chatLoading || !validateModelSettings()}
                         />
                         <Button
-                            onClick={handleSendMessage}
-                            disabled={
-                                chatLoading ||
-                                !validateModelSettings() ||
-                                !inputText.trim()
-                            }
+                            onClick={(e) => {
+                                console.log("Button clicked");
+                                e.preventDefault();
+                                handleSendMessage();
+                            }}
+                            disabled={chatLoading || !validateModelSettings() || !inputText.trim()}
                             className="px-4"
+                            type="button"
                         >
                             <Send size={16}/>
                         </Button>
                     </div>
-                    {!validateModelSettings() && (
-                        <p className="text-xs text-red-500 mt-2">
-                            Please configure model settings before sending messages
-                        </p>
-                    )}
+                    <div className="text-xs text-gray-500 mt-2">
+                        {!validateModelSettings() ? (
+                            <p className="text-red-500">Please configure model settings before sending messages</p>
+                        ) : null}
+                        {chatLoading ? (
+                            <p>Sending message...</p>
+                        ) : null}
+                        <pre className="mt-2 text-xs">
+            Debug info:
+            Provider: {modelConfig.provider}
+                            Model: {modelConfig.provider === 'ollama' ? modelConfig.ollamaModel : modelConfig.model}
+                            Valid: {String(validateModelSettings())}
+                            Loading: {String(chatLoading)}
+                            Has text: {String(!!inputText.trim())}
+        </pre>
+                    </div>
                 </div>
             </div>
         </div>

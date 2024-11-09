@@ -1,7 +1,7 @@
 // src/lib/hooks/useChat.ts
 
-import { useState, useEffect, useCallback } from 'react';
-import { chatApi, fileApi, modelApi, Chat, ChatMessage, ModelConfig, FileMetadata } from '../api';
+import {useEffect, useState} from 'react';
+import {Chat, chatApi, ChatMessage, ModelConfig} from '../api';
 
 export function useChat() {
     const [chats, setChats] = useState<Chat[]>([]);
@@ -85,7 +85,21 @@ export function useChat() {
 
     // Send a message
     const sendMessage = async (content: string, modelConfig: ModelConfig) => {
-        if (!activeChat || !content.trim()) return;
+        if (!activeChat) {
+            console.log("No active chat, creating one...");
+            try {
+                const newChat = await chatApi.createChat();
+                setChats([newChat, ...chats]);
+                setActiveChat(newChat.id);
+                console.log("Created new chat:", newChat.id);
+            } catch (err) {
+                console.error("Failed to create new chat:", err);
+                setError('Failed to create new chat');
+                return;
+            }
+        }
+
+        if (!content.trim()) return;
 
         try {
             setIsLoading(true);
@@ -96,9 +110,11 @@ export function useChat() {
                 timestamp: new Date().toISOString(),
             };
             setMessages(prev => [...prev, userMessage]);
+            console.log('Added user message to state:', userMessage);
 
             // Get streaming response
-            const stream = chatApi.sendMessage(activeChat, content, modelConfig);
+            console.log('Getting stream from API');
+            const stream = chatApi.sendMessage(activeChat!, content, modelConfig);
             let assistantMessage = '';
 
             // Create placeholder for assistant message
@@ -108,9 +124,12 @@ export function useChat() {
                 timestamp: new Date().toISOString(),
             };
             setMessages(prev => [...prev, assistantPlaceholder]);
+            console.log('Added assistant placeholder to state');
 
             // Process the stream
+            console.log('Starting to process stream');
             for await (const chunk of stream) {
+                console.log('Received chunk:', chunk);
                 assistantMessage += chunk;
                 setMessages(prev => [
                     ...prev.slice(0, -1),
@@ -122,15 +141,16 @@ export function useChat() {
             }
 
             // Update chats list
-            const updatedChat = await chatApi.getChat(activeChat);
+            console.log('Stream complete, updating chat');
+            const updatedChat = await chatApi.getChat(activeChat!);
             setChats(prev =>
                 prev.map(chat =>
                     chat.id === activeChat ? updatedChat : chat
                 )
             );
         } catch (err) {
+            console.error('Error in sendMessage:', err);
             setError('Failed to send message');
-            console.error(err);
         } finally {
             setIsLoading(false);
         }
