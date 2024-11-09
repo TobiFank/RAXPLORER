@@ -1,5 +1,4 @@
 # app/api/v1/chat.py
-# app/api/v1/chat.py
 from typing import List, AsyncGenerator
 
 from app.core.database import SessionLocal

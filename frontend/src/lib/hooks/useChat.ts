@@ -85,24 +85,28 @@ export function useChat() {
 
     // Send a message
     const sendMessage = async (content: string, modelConfig: ModelConfig) => {
-        if (!activeChat) {
-            console.log("No active chat, creating one...");
-            try {
-                const newChat = await chatApi.createChat();
-                setChats([newChat, ...chats]);
-                setActiveChat(newChat.id);
-                console.log("Created new chat:", newChat.id);
-            } catch (err) {
-                console.error("Failed to create new chat:", err);
-                setError('Failed to create new chat');
-                return;
-            }
-        }
-
         if (!content.trim()) return;
 
         try {
             setIsLoading(true);
+            let chatId = activeChat;
+
+            // If no active chat, create one and wait for it
+            if (!chatId) {
+                console.log("No active chat, creating one...");
+                try {
+                    const newChat = await chatApi.createChat();
+                    chatId = newChat.id;
+                    setChats(prev => [newChat, ...prev]);
+                    setActiveChat(chatId);
+                    console.log("Created new chat:", chatId);
+                } catch (err) {
+                    console.error("Failed to create chat:", err);
+                    setError('Failed to create new chat');
+                    return;
+                }
+            }
+
             // Add user message immediately
             const userMessage: ChatMessage = {
                 role: 'user',
@@ -112,9 +116,9 @@ export function useChat() {
             setMessages(prev => [...prev, userMessage]);
             console.log('Added user message to state:', userMessage);
 
-            // Get streaming response
+            // Get streaming response using the guaranteed chat ID
             console.log('Getting stream from API');
-            const stream = chatApi.sendMessage(activeChat!, content, modelConfig);
+            const stream = chatApi.sendMessage(chatId, content, modelConfig);
             let assistantMessage = '';
 
             // Create placeholder for assistant message
@@ -142,10 +146,10 @@ export function useChat() {
 
             // Update chats list
             console.log('Stream complete, updating chat');
-            const updatedChat = await chatApi.getChat(activeChat!);
+            const updatedChat = await chatApi.getChat(chatId);
             setChats(prev =>
                 prev.map(chat =>
-                    chat.id === activeChat ? updatedChat : chat
+                    chat.id === chatId ? updatedChat : chat
                 )
             );
         } catch (err) {

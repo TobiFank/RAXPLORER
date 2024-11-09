@@ -54,7 +54,7 @@ class ChatService:
             content: str,
             model_config: dict
     ) -> AsyncGenerator[str, None]:
-        """Create a message and stream the AI response"""
+        """Create a message and stream the response"""
         chat = self.get_chat(chat_id)
 
         # Create user message
@@ -65,34 +65,39 @@ class ChatService:
             content=content,
             timestamp=datetime.utcnow(),
             model_provider=model_config["provider"],
-            model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config[
-                "model"],
+            model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config.get(
+                "model"),
             temperature=model_config["temperature"]
         )
         self.db.add(user_message)
         self.db.commit()
 
-        # Initialize appropriate LLM service
-        llm_service = await create_llm_service(
-            provider=model_config["provider"],
-            api_key=model_config.get("apiKey"),
-            model=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config["model"]
-        )
-
-        # Prepare LLM config
-        llm_config = LLMConfig(
-            model=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config["model"],
-            temperature=model_config["temperature"],
-            top_p=1.0,
-            stop_sequences=[],
-            extra_params={}
-        )
-
-        # Initialize response content
-        response_content = ""
-
-        # Stream response from LLM
         try:
+            model_name = model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config.get(
+                "model")
+            if not model_name:
+                raise ValueError(f"No model name provided for provider {model_config['provider']}")
+
+            # Initialize appropriate LLM service
+            llm_service = await create_llm_service(
+                provider=model_config["provider"],
+                api_key=model_config.get("apiKey"),
+                model=model_name
+            )
+
+            # Prepare LLM config
+            llm_config = LLMConfig(
+                model=model_name,
+                temperature=model_config["temperature"],
+                top_p=1.0,
+                stop_sequences=[],
+                extra_params={}
+            )
+
+            # Initialize response content
+            response_content = ""
+
+            # Stream response from LLM
             async for chunk in llm_service.generate_stream(content, llm_config):
                 response_content += chunk
                 yield chunk
@@ -105,14 +110,14 @@ class ChatService:
                 content=response_content,
                 timestamp=datetime.utcnow(),
                 model_provider=model_config["provider"],
-                model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config[
-                    "model"],
+                model_name=model_name,
                 temperature=model_config["temperature"]
             )
             self.db.add(assistant_message)
             self.db.commit()
 
         except Exception as e:
+            print(f"Error in message generation: {str(e)}")
             # If there's an error, we should still save what we have
             if response_content:
                 assistant_message = Message(
@@ -122,8 +127,7 @@ class ChatService:
                     content=response_content,
                     timestamp=datetime.utcnow(),
                     model_provider=model_config["provider"],
-                    model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else
-                    model_config["model"],
+                    model_name=model_name,
                     temperature=model_config["temperature"]
                 )
                 self.db.add(assistant_message)
