@@ -1,5 +1,3 @@
-# backend/deploy/docker/Dockerfile
-# Base image
 FROM python:3.11-slim as python-base
 
 # Python configuration
@@ -20,7 +18,13 @@ ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
 
 # Install system dependencies
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends \
+        curl \
+        libmagic1 \
+        tesseract-ocr \
+        poppler-utils \
+        libreoffice \
+        netcat-traditional \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -29,6 +33,10 @@ RUN curl -sSL https://install.python-poetry.org | python3 -
 
 # Set working directory
 WORKDIR /app
+
+# Copy start script first and make it executable
+COPY scripts/start.sh /app/scripts/
+RUN chmod +x /app/scripts/start.sh
 
 # Copy project files
 COPY pyproject.toml poetry.lock ./
@@ -40,4 +48,4 @@ COPY alembic ./alembic
 RUN poetry install --no-root --no-dev
 
 # Set the default command
-CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/scripts/start.sh"]

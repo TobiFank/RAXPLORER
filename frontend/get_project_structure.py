@@ -2,7 +2,7 @@ import os
 
 def list_files(start_path='.', exclude_dirs=None):
     if exclude_dirs is None:
-        exclude_dirs = {'.next', 'node_modules', 'public'}
+        exclude_dirs = {'.next', 'node_modules', 'public', 'volumes', '.git', '.idea', '__pycache__', 'migrations'}
 
     for root, dirs, files in os.walk(start_path):
         # Remove directories that are in the exclude list
