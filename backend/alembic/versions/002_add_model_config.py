@@ -21,7 +21,6 @@ def upgrade() -> None:
         sa.Column('model', sa.String(), nullable=False),
         sa.Column('provider', sa.String(), nullable=False),
         sa.Column('temperature', sa.Float(), nullable=False, server_default='0.7'),
-        sa.Column('extra_params', sa.JSON(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.text('CURRENT_TIMESTAMP'))
     )
 

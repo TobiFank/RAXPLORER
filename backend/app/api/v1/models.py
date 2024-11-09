@@ -33,7 +33,7 @@ async def save_model_config(
     if not is_valid:
         raise HTTPException(400, f"Invalid configuration: {', '.join(issues)}")
 
-    return service.save_config(config)
+    return await service.save_config(config)
 
 @router.get("/config/{provider}", response_model=ModelConfigResponse)
 async def get_model_config(

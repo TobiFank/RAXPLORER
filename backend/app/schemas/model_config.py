@@ -7,7 +7,6 @@ class ModelConfigBase(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     model: str
     temperature: float = Field(0.7, ge=0.0, le=1.0)
-    extra_params: Dict[str, Any] = Field(default_factory=dict)
     ollamaModel: Optional[str] = None  # Add this field
 
 class ModelConfigCreate(ModelConfigBase):

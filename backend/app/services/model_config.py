@@ -1,13 +1,16 @@
 # app/services/model_config.py
 from datetime import datetime
 from typing import Optional, List, Tuple
+
 import httpx
 from app.core.config import settings
 from app.models.model_config import ModelConfig
 from app.schemas.model_config import ModelConfigCreate
 from app.services.llm.factory import create_llm_service
 from app.utils.errors import ModelConfigError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
 
 class ModelConfigService:
     def __init__(self, db: Session):
@@ -104,9 +107,11 @@ class ModelConfigService:
     async def save_config(self, config: ModelConfigCreate) -> ModelConfig:
         """Save model configuration and handle Ollama model setup"""
         try:
-            # For Ollama, use ollamaModel as the model name
+            # For Ollama, ensure we have a valid model name and set it correctly
             if config.provider == 'ollama':
-                config.model = config.ollamaModel or config.model
+                if not config.ollamaModel:
+                    raise ModelConfigError("Ollama model name is required")
+                config.model = config.ollamaModel  # Set model to ollamaModel value
 
             # Validate configuration
             is_valid, issues = await self.validate_config(config)
@@ -119,10 +124,6 @@ class ModelConfigService:
             ).first()
 
             config_dict = config.dict(exclude_unset=True)
-            if config.provider != 'ollama':
-                # Remove ollamaModel for non-Ollama providers
-                config_dict.pop('ollamaModel', None)
-
             if db_config:
                 for key, value in config_dict.items():
                     setattr(db_config, key, value)
@@ -134,12 +135,18 @@ class ModelConfigService:
                 )
                 self.db.add(db_config)
 
-            self.db.commit()
-            self.db.refresh(db_config)
-            return db_config
+            try:
+                self.db.commit()
+                self.db.refresh(db_config)
+                return db_config
+            except SQLAlchemyError as e:
+                self.db.rollback()
+                raise ModelConfigError(f"Database error: {str(e)}")
 
         except Exception as e:
             self.db.rollback()
+            if isinstance(e, ModelConfigError):
+                raise e
             raise ModelConfigError(f"Failed to save configuration: {str(e)}")
 
     def get_config(self, provider: str) -> Optional[ModelConfig]:

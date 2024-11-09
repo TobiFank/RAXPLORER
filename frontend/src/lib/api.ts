@@ -121,12 +121,12 @@ export const fileApi = {
 
 // Model Configuration API
 export const modelApi = {
-    validateConfig: async (config: ModelConfig): Promise<boolean> => {
+    validateConfig: async (config: ModelConfig): Promise<{valid: boolean, issues?: string[]}> => {
         try {
             const response = await api.post('/model/validate', config);
-            return response.data.valid;
+            return response.data;  // Return the full validation response
         } catch (error) {
-            return false;
+            return { valid: false, issues: [error.message] };
         }
     },
 
@@ -134,7 +134,7 @@ export const modelApi = {
         await api.post('/model/config', config);
     },
 
-    getConfig: async (): Promise<ModelConfig> => {
+    getConfig: async (): Promise<ModelConfig[]> => {
         const response = await api.get('/model/config');
         return response.data;
     },

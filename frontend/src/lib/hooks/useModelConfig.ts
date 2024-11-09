@@ -68,7 +68,7 @@ export function useModelConfig() {
             if (!validationResponse.valid) {
                 setError({
                     message: 'Configuration validation failed',
-                    details: validationResponse.issues
+                    details: validationResponse.issues || []
                 });
                 return false;
             }
@@ -81,6 +81,7 @@ export function useModelConfig() {
             }));
             return true;
         } catch (err) {
+            console.error('Save config error:', err);  // Add this line
             setError({
                 message: 'Failed to save configuration',
                 details: err.response?.data?.issues || [err.message]
