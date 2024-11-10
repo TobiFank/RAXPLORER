@@ -48,20 +48,45 @@ class ChatService:
         self.db.delete(chat)
         self.db.commit()
 
+    def _format_chat_history(self, messages: List[Message], max_messages: int = 10) -> str:
+        """Format the most recent messages into a conversation history string."""
+        # Take the most recent messages up to max_messages
+        recent_messages = messages[-max_messages:] if max_messages else messages
+
+        # Format into a conversation string
+        formatted_history = []
+        for msg in recent_messages:
+            # Capitalize role for clarity
+            role = msg.role.capitalize()
+            formatted_history.append(f"{role}: {msg.content}")
+
+        return "\n\n".join(formatted_history)
+
     async def create_message(
             self,
             chat_id: str,
             content: str,
-            model_config: dict
+            model_config: dict,
+            max_history_messages: int = 10
     ) -> AsyncGenerator[str, None]:
-        """Create a message and stream the response"""
+        """Create a message and stream the response with conversation history."""
         chat = self.get_chat(chat_id)
-
-        # Initialize response_content at the start
         response_content = ""
 
         try:
-            # Determine model name based on provider
+            # Get existing messages for the chat
+            existing_messages = self.db.query(Message) \
+                .filter(Message.chat_id == chat_id) \
+                .order_by(Message.timestamp.asc()) \
+                .all()
+
+            # Format conversation history
+            conversation_history = self._format_chat_history(
+                existing_messages,
+                max_history_messages
+            )
+
+            # Determine model name
             model_name = model_config.get("model")
             if not model_name:
                 raise ValueError(f"No model name provided for provider {model_config['provider']}")
@@ -96,8 +121,12 @@ class ChatService:
                 extra_params={}
             )
 
-            # Stream response from LLM
-            async for chunk in llm_service.generate_stream(content, llm_config):
+            # Stream response from LLM with conversation history
+            async for chunk in llm_service.generate_stream(
+                    content,
+                    llm_config,
+                    context=conversation_history
+            ):
                 response_content += chunk
                 yield chunk
 
