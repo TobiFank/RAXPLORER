@@ -1,3 +1,6 @@
+// src/lib/hooks/useModelConfig.ts
+'use client';
+
 import {useEffect, useState} from "react";
 import {modelApi, ModelConfig} from "@/lib/api";
 import {Provider} from "@/lib/types";
@@ -23,26 +26,47 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
     }
 };
 
+const STORAGE_KEY = 'modelConfig';
+const ACTIVE_PROVIDER_KEY = 'activeProvider';
+
+// Helper function to safely access localStorage
+const getStorageValue = (key: string, defaultValue: any) => {
+    if (typeof window === 'undefined') {
+        return defaultValue;
+    }
+    try {
+        const item = window.localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+        console.warn(`Error reading localStorage key "${key}":`, error);
+        return defaultValue;
+    }
+};
+
+// Helper function to safely set localStorage
+const setStorageValue = (key: string, value: any) => {
+    if (typeof window !== 'undefined') {
+        try {
+            window.localStorage.setItem(key, JSON.stringify(value));
+        } catch (error) {
+            console.warn(`Error setting localStorage key "${key}":`, error);
+        }
+    }
+};
+
 export interface ModelConfigError {
     message: string;
     details?: string[];
 }
 
-const STORAGE_KEY = 'modelConfig';
-const ACTIVE_PROVIDER_KEY = 'activeProvider';
-
 export function useModelConfig() {
-    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(() => {
-        // Try to load from localStorage on init
-        const saved = localStorage.getItem(STORAGE_KEY);
-        return saved ? JSON.parse(saved) : defaultConfigs;
-    });
+    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(() =>
+        getStorageValue(STORAGE_KEY, defaultConfigs)
+    );
 
-    const [activeProvider, setActiveProvider] = useState<Provider>(() => {
-        // Try to load active provider from localStorage
-        const saved = localStorage.getItem(ACTIVE_PROVIDER_KEY);
-        return (saved as Provider) || 'claude';
-    });
+    const [activeProvider, setActiveProvider] = useState<Provider>(() =>
+        getStorageValue(ACTIVE_PROVIDER_KEY, 'claude')
+    );
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<ModelConfigError | null>(null);
@@ -59,8 +83,7 @@ export function useModelConfig() {
                 newConfigs[config.provider as Provider] = config;
             });
             setConfigs(newConfigs);
-            // Store in localStorage
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfigs));
+            setStorageValue(STORAGE_KEY, newConfigs);
             setError(null);
         } catch (err) {
             setError({message: 'Failed to load model configuration'});
@@ -79,14 +102,14 @@ export function useModelConfig() {
                 ...prev,
                 [activeProvider]: {...prev[activeProvider], ...updates}
             };
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(newConfigs));
+            setStorageValue(STORAGE_KEY, newConfigs);
             return newConfigs;
         });
     };
 
     const switchProvider = (provider: Provider) => {
         setActiveProvider(provider);
-        localStorage.setItem(ACTIVE_PROVIDER_KEY, provider);
+        setStorageValue(ACTIVE_PROVIDER_KEY, provider);
         setError(null);
     };
 
@@ -95,7 +118,6 @@ export function useModelConfig() {
             setIsSaving(true);
             setError(null);
 
-            // First validate
             const validationResponse = await modelApi.validateConfig(config);
             if (!validationResponse.valid) {
                 setError({
@@ -105,7 +127,6 @@ export function useModelConfig() {
                 return false;
             }
 
-            // Then save if valid
             await modelApi.saveConfig(config);
             setConfigs(prev => ({
                 ...prev,
@@ -113,7 +134,7 @@ export function useModelConfig() {
             }));
             return true;
         } catch (err) {
-            console.error('Save config error:', err);  // Add this line
+            console.error('Save config error:', err);
             setError({
                 message: 'Failed to save configuration',
                 details: err.response?.data?.issues || [err.message]

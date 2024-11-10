@@ -57,26 +57,30 @@ class ChatService:
         """Create a message and stream the response"""
         chat = self.get_chat(chat_id)
 
-        # Create user message
-        user_message = Message(
-            id=str(uuid.uuid4()),
-            chat_id=chat_id,
-            role="user",
-            content=content,
-            timestamp=datetime.utcnow(),
-            model_provider=model_config["provider"],
-            model_name=model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config.get(
-                "model"),
-            temperature=model_config["temperature"]
-        )
-        self.db.add(user_message)
-        self.db.commit()
+        # Initialize response_content at the start
+        response_content = ""
 
         try:
-            model_name = model_config.get("ollamaModel") if model_config["provider"] == "ollama" else model_config.get(
+            # Determine model name based on provider
+            model_name = model_config.get("ollama_model") if model_config["provider"] == "ollama" else model_config.get(
                 "model")
+
             if not model_name:
                 raise ValueError(f"No model name provided for provider {model_config['provider']}")
+
+            # Create user message
+            user_message = Message(
+                id=str(uuid.uuid4()),
+                chat_id=chat_id,
+                role="user",
+                content=content,
+                timestamp=datetime.utcnow(),
+                model_provider=model_config["provider"],
+                model_name=model_name,
+                temperature=model_config["temperature"]
+            )
+            self.db.add(user_message)
+            self.db.commit()
 
             # Initialize appropriate LLM service
             llm_service = await create_llm_service(
@@ -93,9 +97,6 @@ class ChatService:
                 stop_sequences=[],
                 extra_params={}
             )
-
-            # Initialize response content
-            response_content = ""
 
             # Stream response from LLM
             async for chunk in llm_service.generate_stream(content, llm_config):
