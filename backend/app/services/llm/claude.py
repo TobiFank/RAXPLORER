@@ -1,9 +1,10 @@
 # app/services/llm/claude.py
-from typing import AsyncGenerator, Optional, Dict, Any
-import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+import json
+from typing import AsyncGenerator, Optional
 
+import httpx
 from app.core.config import settings
+
 from .base import (
     BaseLLMService,
     LLMConfig,
@@ -12,6 +13,7 @@ from .base import (
     ConnectionError,
     GenerationError
 )
+
 
 class ClaudeService(BaseLLMService):
     """Implementation of BaseLLMService for Anthropic's Claude API"""
@@ -43,7 +45,8 @@ class ClaudeService(BaseLLMService):
             timeout=self.timeout,
             headers={
                 "x-api-key": self.api_key,
-                "anthropic-version": "2023-01-01"  # Updated this line
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
             }
         )
 
@@ -54,15 +57,14 @@ class ClaudeService(BaseLLMService):
             await self._client.aclose()
             raise ConnectionError(f"Failed to initialize Claude service: {str(e)}")
 
-
     async def health_check(self) -> bool:
         """Verify API key and connection by making a minimal request."""
         try:
             response = await self._client.post(
                 "/messages",
                 json={
-                    "model": "claude-3-5-haiku-latest",
-                    "max_tokens": 1,
+                    "model": "claude-3-sonnet-20240229",
+                    "max_tokens": 1000,
                     "messages": [
                         {
                             "role": "user",
@@ -76,42 +78,42 @@ class ClaudeService(BaseLLMService):
         except Exception as e:
             raise ConnectionError(f"Claude health check failed: {str(e)}")
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry_error_callback=lambda retry_state: None
-    )
     async def generate(
             self,
             prompt: str,
             config: LLMConfig,
             context: Optional[str] = None
     ) -> LLMResponse:
-        """Generate a complete response with retries."""
         if not self._initialized:
             await self.initialize()
 
         try:
+            formatted_prompt = await self.format_prompt(prompt, context)
             messages = []
-            if config.system_message:
-                messages.append({
-                    "role": "system",
-                    "content": config.system_message
-                })
+
             messages.append({
                 "role": "user",
-                "content": await self.format_prompt(prompt, context)
+                "content": formatted_prompt
             })
+
+            request_data = {
+                "model": config.model,
+                "messages": messages,
+                "max_tokens": config.max_tokens or 1000,
+                "temperature": config.temperature,
+            }
+
+            # Add system message if provided
+            if config.system_message:
+                request_data["system"] = config.system_message
+
+            # Add any extra parameters
+            if config.extra_params:
+                request_data.update(config.extra_params)
 
             response = await self._client.post(
                 "/messages",
-                json={
-                    "model": config.model,
-                    "messages": messages,
-                    "temperature": config.temperature,
-                    "max_tokens": config.max_tokens,
-                    **config.extra_params
-                }
+                json=request_data
             )
             response.raise_for_status()
             data = response.json()
@@ -135,44 +137,68 @@ class ClaudeService(BaseLLMService):
             config: LLMConfig,
             context: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response."""
         if not self._initialized:
             await self.initialize()
 
         try:
-            messages = []
+            formatted_prompt = await self.format_prompt(prompt, context)
+
+            request_data = {
+                "model": config.model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": formatted_prompt
+                    }
+                ],
+                "max_tokens": config.max_tokens or 1000,
+                "temperature": config.temperature,
+                "stream": True
+            }
+
             if config.system_message:
-                messages.append({
-                    "role": "system",
-                    "content": config.system_message
-                })
-            messages.append({
-                "role": "user",
-                "content": await self.format_prompt(prompt, context)
-            })
+                request_data["system"] = config.system_message
+
+            if config.extra_params:
+                request_data.update(config.extra_params)
 
             async with self._client.stream(
                     "POST",
                     "/messages",
-                    json={
-                        "model": config.model,
-                        "messages": messages,
-                        "temperature": config.temperature,
-                        "stream": True,
-                        **config.extra_params
-                    }
+                    json=request_data
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
-                    if not line or line.startswith("data: [DONE]"):
+                    if not line or line == "data: [DONE]":
                         continue
+
+                    # Skip ping events
+                    if "event: ping" in line:
+                        continue
+
                     try:
+                        # Extract the data portion from the SSE line
                         if line.startswith("data: "):
-                            data = line[6:]  # Remove "data: " prefix
-                            chunk = data.get("content")[0].get("text", "")
-                            if chunk:
-                                yield chunk
-                    except Exception:
+                            data_str = line[6:]  # Remove "data: " prefix
+                            chunk_data = json.loads(data_str)
+
+                            # Handle content block delta events
+                            if chunk_data["type"] == "content_block_delta":
+                                delta = chunk_data.get("delta", {})
+                                if delta.get("type") == "text_delta" and "text" in delta:
+                                    yield delta["text"]
+
+                            # Handle complete content blocks
+                            elif chunk_data["type"] == "content_block_start":
+                                content_block = chunk_data.get("content_block", {})
+                                if content_block.get("type") == "text" and "text" in content_block:
+                                    yield content_block["text"]
+
+                    except json.JSONDecodeError as e:
+                        print(f"JSON decode error: {str(e)} for line: {line}")
+                        continue
+                    except Exception as e:
+                        print(f"Error processing chunk: {str(e)}")
                         continue
 
         except Exception as e:
@@ -189,10 +215,10 @@ class ClaudeService(BaseLLMService):
 
         try:
             response = await self._client.post(
-                "/embeddings",
+                "/messages",  # Note: This endpoint might need to be updated based on Claude's embedding API
                 json={
-                    "model": "claude-3-opus-20240229",  # Claude's embedding model
-                    "input": text
+                    "model": config.model if config else "claude-3-sonnet-20240229",
+                    "input": [{"type": "text", "text": text}]
                 }
             )
             response.raise_for_status()
@@ -200,13 +226,3 @@ class ClaudeService(BaseLLMService):
             return data["embeddings"][0]
         except Exception as e:
             raise GenerationError(f"Failed to generate embedding: {str(e)}")
-
-    async def __aenter__(self):
-        """Support async context manager."""
-        await self.initialize()
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup on exit."""
-        if self._client:
-            await self._client.aclose()

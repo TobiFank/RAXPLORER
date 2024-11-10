@@ -8,20 +8,23 @@ import {Provider} from "@/lib/types";
 const defaultConfigs: Record<Provider, ModelConfig> = {
     claude: {
         provider: 'claude',
-        model: 'claude-3-opus',
+        model: 'claude-3-opus-20240229',
         temperature: 0.7,
         apiKey: '',
+        systemMessage: '',
     },
     chatgpt: {
         provider: 'chatgpt',
-        model: 'gpt-4',
+        model: 'gpt-4o',
         temperature: 0.7,
         apiKey: '',
+        systemMessage: '',
     },
     ollama: {
         provider: 'ollama',
         model: '',
         temperature: 0.7,
+        systemMessage: '',
     }
 };
 
