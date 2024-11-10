@@ -103,18 +103,20 @@ class OllamaService(BaseLLMService):
             config: LLMConfig,
             context: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response with error handling."""
         if not self._initialized:
             await self.initialize()
 
         try:
             formatted_prompt = await self.format_prompt(prompt, context)
+            system_prompt = config.system_message if config.system_message else ""
+
             async with self._client.stream(
                     "POST",
                     "/api/generate",
                     json={
                         "model": config.model,
                         "prompt": formatted_prompt,
+                        "system": system_prompt,  # Add system message here for Ollama
                         "temperature": config.temperature,
                         "stream": True,
                         **config.extra_params

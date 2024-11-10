@@ -125,20 +125,28 @@ class ChatGPTService(BaseLLMService):
             config: LLMConfig,
             context: Optional[str] = None
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response."""
         if not self._initialized:
             await self.initialize()
 
         try:
-            formatted_prompt = await self.format_prompt(prompt, context)
+            messages = []
+            if config.system_message:
+                messages.append({
+                    "role": "system",
+                    "content": config.system_message
+                })
+            messages.append({
+                "role": "user",
+                "content": await self.format_prompt(prompt, context)
+            })
+
             async with self._client.stream(
                     "POST",
                     "/chat/completions",
                     json={
                         "model": config.model,
-                        "messages": [{"role": "user", "content": formatted_prompt}],
+                        "messages": messages,  # Use the messages array with system message
                         "temperature": config.temperature,
-                        "max_tokens": config.max_tokens,
                         "stream": True,
                         **config.extra_params
                     }

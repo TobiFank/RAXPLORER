@@ -127,6 +127,7 @@ class ChatService:
                 temperature=model_config["temperature"],
                 top_p=1.0,
                 stop_sequences=[],
+                system_message=saved_config.system_message,  # Add this line
                 extra_params={}
             )
 
