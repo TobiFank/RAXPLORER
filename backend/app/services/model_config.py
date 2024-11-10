@@ -57,7 +57,7 @@ class ModelConfigService:
 
         try:
             if config.provider == 'ollama':
-                model_name = config.ollamaModel or config.model
+                model_name = config.ollama_model or config.model
                 if not model_name:
                     issues.append("Ollama model name is required")
                     return False, issues
@@ -109,9 +109,9 @@ class ModelConfigService:
         try:
             # For Ollama, ensure we have a valid model name and set it correctly
             if config.provider == 'ollama':
-                if not config.ollamaModel:
+                if not config.ollama_model:
                     raise ModelConfigError("Ollama model name is required")
-                config.model = config.ollamaModel  # Set model to ollamaModel value
+                config.model = config.ollama_model  # Set model to ollamaModel value
 
             # Validate configuration
             is_valid, issues = await self.validate_config(config)

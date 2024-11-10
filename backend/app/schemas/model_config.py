@@ -30,8 +30,8 @@ class ModelConfigCreate(ModelConfigBase):
     def validate_model(cls, v, values):
         provider = values.get('provider')
         if provider == 'ollama':
-            # For Ollama, use ollamaModel if model is empty
-            return values.get('ollamaModel', '') or v
+            # For Ollama, use ollama_model if model is empty
+            return values.get('ollama_model', '') or v
         return v
 
 class ModelConfigResponse(ModelConfigBase):
