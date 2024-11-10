@@ -41,7 +41,7 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE model_configs 
-        SET ollamaModel = model 
+        SET ollama_model = model 
         WHERE provider = 'ollama' AND model IS NOT NULL
         """
     )
