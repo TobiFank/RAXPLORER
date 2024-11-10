@@ -227,73 +227,68 @@ const ChatInterface = () => {
 
                             {/* API Settings */}
                             {(modelConfig.provider === 'claude' || modelConfig.provider === 'chatgpt') && (
-                                <>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium">API Key</label>
-                                        <Input
-                                            type="password"
-                                            placeholder={`Enter your ${modelConfig.provider === 'claude' ? 'Anthropic' : 'OpenAI'} API key`}
-                                            value={modelConfig.apiKey || ''}
-                                            onChange={(e) => updateDraft({
-                                                apiKey: e.target.value
-                                            })}
-                                        />
-                                        <p className="text-xs text-gray-500">
-                                            {modelConfig.provider === 'claude'
-                                                ? 'Get your API key from console.anthropic.com'
-                                                : 'Get your API key from platform.openai.com'}
-                                        </p>
-                                    </div>
-
-                                    {/* Model Selection */}
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium">Model</label>
-                                        {modelConfig.provider === 'ollama' ? (
-                                            <Input
-                                                placeholder="e.g., llama2, mistral, codellama"
-                                                value={modelConfig.model || ''}
-                                                onChange={(e) => updateDraft({
-                                                    model: e.target.value
-                                                })}
-                                            />
-                                        ) : (
-                                            <Select
-                                                value={modelConfig.model}
-                                                onValueChange={(value) => updateDraft({
-                                                    model: value
-                                                })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select Model"/>
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {modelConfig.provider === 'claude' ? (
-                                                        <>
-                                                            <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                                                            <SelectItem value="claude-3-sonnet">Claude 3
-                                                                Sonnet</SelectItem>
-                                                            <SelectItem value="claude-3-haiku">Claude 3
-                                                                Haiku</SelectItem>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <SelectItem value="gpt-4">GPT-4 Turbo</SelectItem>
-                                                            <SelectItem value="gpt-4-0125-preview">GPT-4
-                                                                Preview</SelectItem>
-                                                            <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                                                        </>
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-                                        )}
-                                        {modelConfig.provider === 'ollama' && (
-                                            <p className="text-xs text-gray-500">
-                                                Enter the name of your locally installed Ollama model
-                                            </p>
-                                        )}
-                                    </div>
-                                </>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">API Key</label>
+                                    <Input
+                                        type="password"
+                                        placeholder={`Enter your ${modelConfig.provider === 'claude' ? 'Anthropic' : 'OpenAI'} API key`}
+                                        value={modelConfig.apiKey || ''}
+                                        onChange={(e) => updateDraft({
+                                            apiKey: e.target.value
+                                        })}
+                                    />
+                                    <p className="text-xs text-gray-500">
+                                        {modelConfig.provider === 'claude'
+                                            ? 'Get your API key from console.anthropic.com'
+                                            : 'Get your API key from platform.openai.com'}
+                                    </p>
+                                </div>
                             )}
+
+                            {/* Model Selection */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Model</label>
+                                {modelConfig.provider === 'ollama' ? (
+                                    <Input
+                                        placeholder="e.g., llama2, mistral, codellama"
+                                        value={modelConfig.model || ''}
+                                        onChange={(e) => updateDraft({
+                                            model: e.target.value
+                                        })}
+                                    />
+                                ) : (
+                                    <Select
+                                        value={modelConfig.model}
+                                        onValueChange={(value) => updateDraft({
+                                            model: value
+                                        })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Model"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {modelConfig.provider === 'claude' ? (
+                                                <>
+                                                    <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
+                                                    <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
+                                                    <SelectItem value="claude-3-haiku">Claude 3 Haiku</SelectItem>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <SelectItem value="gpt-4">GPT-4 Turbo</SelectItem>
+                                                    <SelectItem value="gpt-4-0125-preview">GPT-4 Preview</SelectItem>
+                                                    <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                                                </>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                                {modelConfig.provider === 'ollama' && (
+                                    <p className="text-xs text-gray-500">
+                                        Enter the name of your locally installed Ollama model
+                                    </p>
+                                )}
+                            </div>
 
                             {/* Temperature Setting */}
                             <div className="space-y-2">
