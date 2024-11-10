@@ -7,6 +7,5 @@ export interface ModelConfig {
     provider: Provider;
     apiKey?: string;
     model: ClaudeModel | ChatGPTModel | string;
-    ollamaModel?: string;
     temperature: number;
 }

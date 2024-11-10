@@ -22,7 +22,6 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
         provider: 'ollama',
         model: '',
         temperature: 0.7,
-        ollamaModel: '',
     }
 };
 

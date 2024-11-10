@@ -100,12 +100,12 @@ const ChatInterface = () => {
     // Model validation
     const validateModelSettings = useCallback(() => {
         const isValid = modelConfig.provider === 'ollama'
-            ? modelConfig.ollamaModel?.trim() !== ''
+            ? modelConfig.model?.trim() !== ''
             : modelConfig.apiKey?.trim() !== '';
 
         console.log("Model settings validation:", {
             provider: modelConfig.provider,
-            ollamaModel: modelConfig.ollamaModel,
+            model: modelConfig.model,
             isValid: isValid
         });
 
@@ -209,8 +209,7 @@ const ChatInterface = () => {
                                             provider: value,
                                             model: value === 'claude' ? 'claude-3-opus' :
                                                 value === 'chatgpt' ? 'gpt-4' : '',
-                                            apiKey: '', // Reset API key when changing provider
-                                            ollamaModel: value === 'ollama' ? modelConfig.ollamaModel : undefined,
+                                            apiKey: '',
                                             temperature: modelConfig.temperature
                                         });
                                     }}
@@ -246,53 +245,54 @@ const ChatInterface = () => {
                                         </p>
                                     </div>
 
+                                    {/* Model Selection */}
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">Model</label>
-                                        <Select
-                                            value={modelConfig.model}
-                                            onValueChange={(value) => updateDraft({
-                                                model: value
-                                            })}
-                                        >
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select Model"/>
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {modelConfig.provider === 'claude' ? (
-                                                    <>
-                                                        <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
-                                                        <SelectItem value="claude-3-sonnet">Claude 3 Sonnet</SelectItem>
-                                                        <SelectItem value="claude-3-haiku">Claude 3 Haiku</SelectItem>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <SelectItem value="gpt-4">GPT-4 Turbo</SelectItem>
-                                                        <SelectItem value="gpt-4-0125-preview">GPT-4
-                                                            Preview</SelectItem>
-                                                        <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                                                    </>
-                                                )}
-                                            </SelectContent>
-                                        </Select>
+                                        {modelConfig.provider === 'ollama' ? (
+                                            <Input
+                                                placeholder="e.g., llama2, mistral, codellama"
+                                                value={modelConfig.model || ''}
+                                                onChange={(e) => updateDraft({
+                                                    model: e.target.value
+                                                })}
+                                            />
+                                        ) : (
+                                            <Select
+                                                value={modelConfig.model}
+                                                onValueChange={(value) => updateDraft({
+                                                    model: value
+                                                })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select Model"/>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {modelConfig.provider === 'claude' ? (
+                                                        <>
+                                                            <SelectItem value="claude-3-opus">Claude 3 Opus</SelectItem>
+                                                            <SelectItem value="claude-3-sonnet">Claude 3
+                                                                Sonnet</SelectItem>
+                                                            <SelectItem value="claude-3-haiku">Claude 3
+                                                                Haiku</SelectItem>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <SelectItem value="gpt-4">GPT-4 Turbo</SelectItem>
+                                                            <SelectItem value="gpt-4-0125-preview">GPT-4
+                                                                Preview</SelectItem>
+                                                            <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                                                        </>
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                        {modelConfig.provider === 'ollama' && (
+                                            <p className="text-xs text-gray-500">
+                                                Enter the name of your locally installed Ollama model
+                                            </p>
+                                        )}
                                     </div>
                                 </>
-                            )}
-
-                            {/* Ollama Settings */}
-                            {modelConfig.provider === 'ollama' && (
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Model Name</label>
-                                    <Input
-                                        placeholder="e.g., llama2, mistral, codellama"
-                                        value={modelConfig.ollamaModel || ''}
-                                        onChange={(e) => updateDraft({
-                                            ollamaModel: e.target.value
-                                        })}
-                                    />
-                                    <p className="text-xs text-gray-500">
-                                        Enter the name of your locally installed Ollama model
-                                    </p>
-                                </div>
                             )}
 
                             {/* Temperature Setting */}
@@ -495,13 +495,13 @@ const ChatInterface = () => {
                             <p>Sending message...</p>
                         ) : null}
                         <pre className="mt-2 text-xs">
-            Debug info:
-            Provider: {modelConfig.provider}
-                            Model: {modelConfig.provider === 'ollama' ? modelConfig.ollamaModel : modelConfig.model}
+    Debug info:
+    Provider: {modelConfig.provider}
+                            Model: {modelConfig.model}
                             Valid: {String(validateModelSettings())}
                             Loading: {String(chatLoading)}
                             Has text: {String(!!inputText.trim())}
-        </pre>
+</pre>
                     </div>
                 </div>
             </div>

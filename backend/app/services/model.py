@@ -41,7 +41,7 @@ class ModelService:
         if model_settings.provider not in ["claude", "chatgpt", "ollama"]:
             issues.append(f"Unsupported provider: {model_settings.provider}")
 
-        if model_settings.provider == "ollama" and not model_settings.ollama_model:
+        if model_settings.provider == "ollama" and not model_settings.model:
             issues.append("Ollama model must be specified when using Ollama provider")
 
         if model_settings.temperature < 0.0 or model_settings.temperature > 1.0:

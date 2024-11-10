@@ -28,7 +28,6 @@ export interface ModelConfig {
     provider: 'claude' | 'chatgpt' | 'ollama';
     apiKey?: string;
     model: string;
-    ollamaModel?: string;
     temperature: number;
 }
 

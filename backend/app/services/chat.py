@@ -62,9 +62,7 @@ class ChatService:
 
         try:
             # Determine model name based on provider
-            model_name = model_config.get("ollama_model") if model_config["provider"] == "ollama" else model_config.get(
-                "model")
-
+            model_name = model_config.get("model")
             if not model_name:
                 raise ValueError(f"No model name provided for provider {model_config['provider']}")
 

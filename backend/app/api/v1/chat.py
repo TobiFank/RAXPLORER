@@ -42,7 +42,6 @@ async def create_message(
                 "provider": message.modelConfig.provider,
                 "model": message.modelConfig.model,
                 "temperature": message.modelConfig.temperature,
-                "ollamaModel": message.modelConfig.ollama_model
             }
 
             async for chunk in chat_service.create_message(

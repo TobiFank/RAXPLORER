@@ -57,8 +57,7 @@ class ModelConfigService:
 
         try:
             if config.provider == 'ollama':
-                model_name = config.ollama_model or config.model
-                if not model_name:
+                if not config.model:
                     issues.append("Ollama model name is required")
                     return False, issues
 
@@ -75,11 +74,12 @@ class ModelConfigService:
                     # Try to load the model
                     model_loaded, load_error = await self._load_ollama_model(
                         client,
-                        model_name
+                        config.model
                     )
                     if not model_loaded:
                         issues.append(load_error)
                         return False, issues
+
 
             elif config.provider in ['claude', 'chatgpt']:
                 if not config.api_key:
@@ -108,10 +108,8 @@ class ModelConfigService:
         """Save model configuration and handle Ollama model setup"""
         try:
             # For Ollama, ensure we have a valid model name and set it correctly
-            if config.provider == 'ollama':
-                if not config.ollama_model:
-                    raise ModelConfigError("Ollama model name is required")
-                config.model = config.ollama_model  # Set model to ollamaModel value
+            if config.provider == 'ollama' and not config.model:
+                raise ModelConfigError("Ollama model name is required")
 
             # Validate configuration
             is_valid, issues = await self.validate_config(config)

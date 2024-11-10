@@ -10,7 +10,6 @@ class ModelSettings(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     api_key: Optional[str] = None
     model: str = ""
-    ollama_model: Optional[str] = None
     temperature: float = Field(0.7, ge=0.0, le=1.0)  # Add this line
 
     class Config:
