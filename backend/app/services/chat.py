@@ -7,6 +7,7 @@ from app.models.chat import Chat, Message
 from app.schemas.chat import ChatCreate, ChatUpdate
 from app.services.llm.base import LLMConfig
 from app.services.llm.factory import create_llm_service
+from app.services.model_config import ModelConfigService
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 class ChatService:
     def __init__(self, db: Session):
         self.db = db
+        self.model_config_service = ModelConfigService(db)
 
     def create_chat(self, chat_create: ChatCreate) -> Chat:
         chat = Chat(
@@ -70,6 +72,7 @@ class ChatService:
             max_history_messages: int = 10
     ) -> AsyncGenerator[str, None]:
         """Create a message and stream the response with conversation history."""
+        print("Starting create_message with config:", model_config)
         chat = self.get_chat(chat_id)
         response_content = ""
 
@@ -86,10 +89,16 @@ class ChatService:
                 max_history_messages
             )
 
+            # Get saved model config
+            provider = model_config["provider"]
+            saved_config = self.model_config_service.get_config(provider)
+            if not saved_config:
+                raise ValueError(f"No configuration found for provider {provider}")
+
             # Determine model name
             model_name = model_config.get("model")
             if not model_name:
-                raise ValueError(f"No model name provided for provider {model_config['provider']}")
+                raise ValueError(f"No model name provided for provider {provider}")
 
             # Create user message
             user_message = Message(
@@ -98,17 +107,17 @@ class ChatService:
                 role="user",
                 content=content,
                 timestamp=datetime.utcnow(),
-                model_provider=model_config["provider"],
+                model_provider=provider,
                 model_name=model_name,
                 temperature=model_config["temperature"]
             )
             self.db.add(user_message)
             self.db.commit()
 
-            # Initialize appropriate LLM service
+            # Initialize appropriate LLM service using saved config
             llm_service = await create_llm_service(
-                provider=model_config["provider"],
-                api_key=model_config.get("apiKey"),
+                provider=provider,
+                api_key=saved_config.api_key,  # Use saved API key instead of from request
                 model=model_name
             )
 
@@ -137,7 +146,7 @@ class ChatService:
                 role="assistant",
                 content=response_content,
                 timestamp=datetime.utcnow(),
-                model_provider=model_config["provider"],
+                model_provider=provider,
                 model_name=model_name,
                 temperature=model_config["temperature"]
             )
@@ -154,7 +163,7 @@ class ChatService:
                     role="assistant",
                     content=response_content,
                     timestamp=datetime.utcnow(),
-                    model_provider=model_config["provider"],
+                    model_provider=provider,
                     model_name=model_name,
                     temperature=model_config["temperature"]
                 )

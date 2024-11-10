@@ -1,4 +1,5 @@
 # app/services/llm/chatgpt.py
+import json
 from typing import AsyncGenerator, Optional, Dict, Any
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -138,11 +139,13 @@ class ChatGPTService(BaseLLMService):
                         continue
                     try:
                         if line.startswith("data: "):
-                            data = line[6:]  # Remove "data: " prefix
-                            chunk = data["choices"][0]["delta"].get("content", "")
-                            if chunk:
-                                yield chunk
-                    except Exception:
+                            json_data = json.loads(line[6:])  # Remove "data: " prefix and parse JSON
+                            if "choices" in json_data and len(json_data["choices"]) > 0:
+                                delta = json_data["choices"][0].get("delta", {})
+                                if "content" in delta:
+                                    yield delta["content"]
+                    except Exception as e:
+                        print(f"Error processing chunk: {str(e)}")
                         continue
 
         except Exception as e:
