@@ -2,6 +2,8 @@
 from datetime import datetime
 from typing import List, Optional
 
+from app.utils.case_utils import to_camel
+
 from pydantic import BaseModel, Field
 
 
@@ -9,8 +11,12 @@ class ModelSettings(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     api_key: Optional[str] = None
     model: str = ""
-    ollama_model: Optional[str] = None  # Changed from ollamaModel to match Python naming
-    temperature: float = Field(0.7, ge=0.0, le=1.0)
+    ollama_model: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+        alias_generator = to_camel
+        populate_by_name = True
 
 
 class MessageBase(BaseModel):

@@ -3,11 +3,18 @@ from pydantic import BaseModel, Field, validator
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+from app.utils.case_utils import to_camel
+
+
 class ModelConfigBase(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     model: str
     temperature: float = Field(0.7, ge=0.0, le=1.0)
-    ollamaModel: Optional[str] = None  # Add this field
+    ollama_model: Optional[str] = None  # Use snake_case
+
+    class Config:
+        alias_generator = to_camel
+        populate_by_name = True
 
 class ModelConfigCreate(ModelConfigBase):
     api_key: Optional[str] = None
