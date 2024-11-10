@@ -35,7 +35,7 @@ depends_on = None
 def upgrade() -> None:
     # For SQLite, we need to use batch operations
     with op.batch_alter_table('model_configs') as batch_op:
-        batch_op.add_column(sa.Column('ollamaModel', sa.String(), nullable=True))
+        batch_op.add_column(sa.Column('ollama_model', sa.String(), nullable=True))
 
     # Migrate existing Ollama configs to use ollamaModel
     op.execute(
@@ -49,4 +49,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     # For SQLite, we need to use batch operations
     with op.batch_alter_table('model_configs') as batch_op:
-        batch_op.drop_column('ollamaModel')
+        batch_op.drop_column('ollama_model')
