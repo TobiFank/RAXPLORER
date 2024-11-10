@@ -43,7 +43,7 @@ class ClaudeService(BaseLLMService):
             timeout=self.timeout,
             headers={
                 "x-api-key": self.api_key,
-                "anthropic-version": "2023-06-01"
+                "anthropic-version": "2023-01-01"  # Updated this line
             }
         )
 
@@ -54,15 +54,21 @@ class ClaudeService(BaseLLMService):
             await self._client.aclose()
             raise ConnectionError(f"Failed to initialize Claude service: {str(e)}")
 
+
     async def health_check(self) -> bool:
         """Verify API key and connection by making a minimal request."""
         try:
             response = await self._client.post(
                 "/messages",
                 json={
-                    "model": "claude-3-opus-20240229",
+                    "model": "claude-3-5-haiku-latest",
                     "max_tokens": 1,
-                    "messages": [{"role": "user", "content": "Hi"}]
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Hi"
+                        }
+                    ]
                 }
             )
             response.raise_for_status()
@@ -86,16 +92,24 @@ class ClaudeService(BaseLLMService):
             await self.initialize()
 
         try:
-            formatted_prompt = await self.format_prompt(prompt, context)
+            messages = []
+            if config.system_message:
+                messages.append({
+                    "role": "system",
+                    "content": config.system_message
+                })
+            messages.append({
+                "role": "user",
+                "content": await self.format_prompt(prompt, context)
+            })
+
             response = await self._client.post(
                 "/messages",
                 json={
                     "model": config.model,
-                    "messages": [{"role": "user", "content": formatted_prompt}],
+                    "messages": messages,
                     "temperature": config.temperature,
                     "max_tokens": config.max_tokens,
-                    "top_p": config.top_p,
-                    "stop_sequences": config.stop_sequences,
                     **config.extra_params
                 }
             )
@@ -126,15 +140,24 @@ class ClaudeService(BaseLLMService):
             await self.initialize()
 
         try:
-            formatted_prompt = await self.format_prompt(prompt, context)
+            messages = []
+            if config.system_message:
+                messages.append({
+                    "role": "system",
+                    "content": config.system_message
+                })
+            messages.append({
+                "role": "user",
+                "content": await self.format_prompt(prompt, context)
+            })
+
             async with self._client.stream(
                     "POST",
                     "/messages",
                     json={
                         "model": config.model,
-                        "messages": [{"role": "user", "content": formatted_prompt}],
+                        "messages": messages,
                         "temperature": config.temperature,
-                        "max_tokens": config.max_tokens,
                         "stream": True,
                         **config.extra_params
                     }

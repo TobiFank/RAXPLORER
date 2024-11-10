@@ -10,6 +10,7 @@ class ModelConfigBase(BaseModel):
     provider: str = Field(..., pattern="^(claude|chatgpt|ollama)$")
     model: str
     temperature: float = Field(0.7, ge=0.0, le=1.0)
+    system_message: Optional[str] = None
 
     class Config:
         alias_generator = to_camel

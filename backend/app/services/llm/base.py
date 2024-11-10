@@ -28,6 +28,7 @@ class LLMConfig(BaseModel):
     top_p: Optional[float] = Field(None, ge=0.0, le=1.0)
     stop_sequences: Optional[list[str]] = None
     response_format: ResponseFormat = ResponseFormat.TEXT
+    system_message: Optional[str] = None
     extra_params: Dict[str, Any] = Field(default_factory=dict)
 
 class TokenUsage(BaseModel):

@@ -80,12 +80,22 @@ class ChatGPTService(BaseLLMService):
             await self.initialize()
 
         try:
-            formatted_prompt = await self.format_prompt(prompt, context)
+            messages = []
+            if config.system_message:
+                messages.append({
+                    "role": "system",
+                    "content": config.system_message
+                })
+            messages.append({
+                "role": "user",
+                "content": await self.format_prompt(prompt, context)
+            })
+
             response = await self._client.post(
                 "/chat/completions",
                 json={
                     "model": config.model,
-                    "messages": [{"role": "user", "content": formatted_prompt}],
+                    "messages": messages,
                     "temperature": config.temperature,
                     "max_tokens": config.max_tokens,
                     "top_p": config.top_p,

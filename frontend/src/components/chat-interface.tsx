@@ -313,6 +313,21 @@ const ChatInterface = () => {
                                     Controls randomness: 0 is focused, 2 is more creative
                                 </p>
                             </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">System Message</label>
+                                <Textarea
+                                    placeholder="Optional: Enter a system message to set the behavior of the AI"
+                                    value={modelConfig.systemMessage || ''}
+                                    onChange={(e) => updateDraft({
+                                        systemMessage: e.target.value
+                                    })}
+                                    className="resize-none"
+                                    rows={3}
+                                />
+                                <p className="text-xs text-gray-500">
+                                    Define the AI's behavior and context for this model
+                                </p>
+                            </div>
 
                             {/* Save Button */}
                             <Button

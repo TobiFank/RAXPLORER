@@ -29,6 +29,7 @@ export interface ModelConfig {
     apiKey?: string;
     model: string;
     temperature: number;
+    systemMessage?: string;
 }
 
 // API Configuration

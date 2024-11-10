@@ -68,11 +68,14 @@ class OllamaService(BaseLLMService):
 
         try:
             formatted_prompt = await self.format_prompt(prompt, context)
+            system_prompt = config.system_message if config.system_message else ""
+
             response = await self._client.post(
                 "/api/generate",
                 json={
                     "model": config.model,
                     "prompt": formatted_prompt,
+                    "system": system_prompt,  # Ollama supports system prompts this way
                     "temperature": config.temperature,
                     "top_p": config.top_p,
                     "stop": config.stop_sequences,
