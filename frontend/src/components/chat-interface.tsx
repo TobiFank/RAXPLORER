@@ -11,6 +11,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
+import {Provider} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -199,31 +200,21 @@ const ChatInterface = () => {
                     {isSettingsExpanded && (
                         <CardContent className="space-y-4">
                             {/* Provider Selection */}
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Provider</label>
-                                <Select
-                                    value={modelConfig.provider}
-                                    onValueChange={(value: 'claude' | 'chatgpt' | 'ollama') => {
-                                        switchProvider(value);
-                                        updateDraft({
-                                            provider: value,
-                                            model: value === 'claude' ? 'claude-3-opus' :
-                                                value === 'chatgpt' ? 'gpt-4' : '',
-                                            apiKey: '',
-                                            temperature: modelConfig.temperature
-                                        });
-                                    }}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Provider"/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="claude">Claude</SelectItem>
-                                        <SelectItem value="chatgpt">ChatGPT</SelectItem>
-                                        <SelectItem value="ollama">Ollama (Local)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <Select
+                                value={modelConfig.provider}
+                                onValueChange={(value: Provider) => {
+                                    switchProvider(value);
+                                }}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select Provider"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="claude">Claude</SelectItem>
+                                    <SelectItem value="chatgpt">ChatGPT</SelectItem>
+                                    <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                                </SelectContent>
+                            </Select>
 
                             {/* API Settings */}
                             {(modelConfig.provider === 'claude' || modelConfig.provider === 'chatgpt') && (
@@ -269,18 +260,24 @@ const ChatInterface = () => {
                                         <SelectContent>
                                             {modelConfig.provider === 'claude' ? (
                                                 <>
-                                                    <SelectItem value="claude-3-opus-20240229">Claude 3 Opus</SelectItem>
-                                                    <SelectItem value="claude-3-sonnet-20240229">Claude 3 Sonnet</SelectItem>
-                                                    <SelectItem value="claude-3-haiku-20240307">Claude 3 Haiku</SelectItem>
-                                                    <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</SelectItem>
-                                                    <SelectItem value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</SelectItem>
+                                                    <SelectItem value="claude-3-opus-20240229">Claude 3
+                                                        Opus</SelectItem>
+                                                    <SelectItem value="claude-3-sonnet-20240229">Claude 3
+                                                        Sonnet</SelectItem>
+                                                    <SelectItem value="claude-3-haiku-20240307">Claude 3
+                                                        Haiku</SelectItem>
+                                                    <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5
+                                                        Sonnet</SelectItem>
+                                                    <SelectItem value="claude-3-5-haiku-20241022">Claude 3.5
+                                                        Haiku</SelectItem>
                                                 </>
                                             ) : (
                                                 <>
                                                     <SelectItem value="gpt-4o">GPT-4 Omni</SelectItem>
                                                     <SelectItem value="gpt-4o-mini">GPT-4 Omni Mini</SelectItem>
                                                     <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                                                    <SelectItem value="gpt-4-0125-preview">GPT-4 Turbo Preview</SelectItem>
+                                                    <SelectItem value="gpt-4-0125-preview">GPT-4 Turbo
+                                                        Preview</SelectItem>
                                                     <SelectItem value="gpt-3.5-turbo-0125">GPT-3.5 Turbo</SelectItem>
                                                 </>
                                             )}
