@@ -47,6 +47,11 @@ export interface FileMetadata {
     uploadedAt: string;
 }
 
+export interface EditState {
+    chatId: string;
+    title: string;
+}
+
 // Frontend-only model information
 export const MODEL_INFORMATION = {
     claude: {

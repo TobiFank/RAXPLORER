@@ -1,7 +1,7 @@
 'use client';
 
 import React, {useCallback, useState} from 'react';
-import {ChevronDown, FileText, Plus, Send, Settings, Trash2} from 'lucide-react';
+import {ChevronDown, FileText, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
@@ -11,7 +11,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
-import {MODEL_INFORMATION, Provider} from "@/lib/types";
+import {MODEL_INFORMATION, Provider, EditState, Chat} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -24,7 +24,8 @@ const ChatInterface = () => {
         createChat,
         deleteChat,
         switchChat,
-        sendMessage
+        sendMessage,
+        updateChatTitle
     } = useChat();
 
     const {
@@ -51,7 +52,8 @@ const ChatInterface = () => {
     const [inputText, setInputText] = useState('');
     const [isSettingsExpanded, setIsSettingsExpanded] = useState(true);
     const [isDragging, setIsDragging] = useState(false);
-    const [isModelValid, setIsModelValid] = useState(true);
+    const [editingChatId, setEditingChatId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState<string>('');
 
     // File handling functions
     const handleDragOver = (e: React.DragEvent) => {
@@ -72,6 +74,26 @@ const ChatInterface = () => {
         for (const file of droppedFiles) {
             await uploadFile(file);
         }
+    };
+
+    const handleTitleSubmit = async (chatId: string) => {
+        if (editingTitle.trim() && editingTitle !== 'New Chat') {
+            try {
+                await updateChatTitle(chatId, editingTitle.trim());
+                // Only clear editing state after successful update
+                setEditingChatId(null);
+                setEditingTitle('');
+            } catch (error) {
+                console.error('Failed to update chat title:', error);
+                // On error, keep the editing state active
+            }
+        }
+    };
+
+    const startEditing = (chat: Chat, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setEditingChatId(chat.id);
+        setEditingTitle(chat.title);
     };
 
     // Message handling
@@ -152,29 +174,60 @@ const ChatInterface = () => {
                             className={`group flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 cursor-pointer ${
                                 activeChat === chat.id ? 'bg-gray-100' : ''
                             }`}
-                            onClick={() => switchChat(chat.id)}
+                            onClick={() => editingChatId !== chat.id && switchChat(chat.id)}
                         >
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">
-                                    {chat.title}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    {new Date(chat.createdAt).toLocaleDateString()}
-                                </p>
+                                {editingChatId === chat.id ? (
+                                    <Input
+                                        value={editingTitle}
+                                        onChange={(e) => setEditingTitle(e.target.value)}
+                                        onKeyDown={async (e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                await handleTitleSubmit(chat.id);
+                                            } else if (e.key === 'Escape') {
+                                                setEditingChatId(null);
+                                                setEditingTitle('');
+                                            }
+                                        }}
+                                        autoFocus
+                                        className="h-6 text-sm"
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                ) : (
+                                    <>
+                                        <p className="text-sm font-medium truncate">
+                                            {chat.title}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            {new Date(chat.createdAt).toLocaleDateString()}
+                                        </p>
+                                    </>
+                                )}
                             </div>
-                            {chats.length > 1 && (
+                            <div className="flex gap-1">
                                 <Button
                                     variant="ghost"
                                     size="icon"
                                     className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        deleteChat(chat.id);
-                                    }}
+                                    onClick={(e) => startEditing(chat, e)}
                                 >
-                                    <Trash2 size={14}/>
+                                    <Pencil size={14}/>
                                 </Button>
-                            )}
+                                {chats.length > 1 && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            deleteChat(chat.id);
+                                        }}
+                                    >
+                                        <Trash2 size={14}/>
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>

@@ -162,6 +162,22 @@ export function useChat() {
         }
     };
 
+    const updateChatTitle = async (chatId: string, title: string): Promise<void> => {
+        try {
+            setIsLoading(true);
+            const updatedChat = await chatApi.updateChatTitle(chatId, title);
+            setChats(prev => prev.map(chat =>
+                chat.id === chatId ? updatedChat : chat
+            ));
+            return Promise.resolve();
+        } catch (err) {
+            console.error('Error updating chat title:', err);
+            return Promise.reject(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return {
         chats,
         activeChat,
@@ -172,5 +188,6 @@ export function useChat() {
         deleteChat,
         switchChat,
         sendMessage,
+        updateChatTitle,
     };
 }
