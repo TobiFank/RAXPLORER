@@ -8,14 +8,16 @@ from app.schemas.chat import ChatCreate, ChatUpdate
 from app.services.llm.base import LLMConfig
 from app.services.llm.factory import create_llm_service
 from app.services.model_config import ModelConfigService
+from app.services.rag.processor import RAGProcessor
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 
 class ChatService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, rag_processor: RAGProcessor):
         self.db = db
         self.model_config_service = ModelConfigService(db)
+        self.rag_processor = rag_processor
 
     def create_chat(self, chat_create: ChatCreate) -> Chat:
         chat = Chat(
@@ -66,17 +68,28 @@ class ChatService:
 
     def _format_chat_history(self, messages: List[Message], max_messages: int = 10) -> str:
         """Format the most recent messages into a conversation history string."""
-        # Take the most recent messages up to max_messages
         recent_messages = messages[-max_messages:] if max_messages else messages
-
-        # Format into a conversation string
         formatted_history = []
         for msg in recent_messages:
-            # Capitalize role for clarity
             role = msg.role.capitalize()
             formatted_history.append(f"{role}: {msg.content}")
-
         return "\n\n".join(formatted_history)
+
+    def _create_rag_prompt(self, query: str, context: str) -> str:
+        """Create a RAG-specific prompt that enforces source attribution."""
+        return f"""Answer the following question using the provided context. If the context contains relevant information, you must:
+1. Clearly indicate which document and section the information comes from
+2. Use direct quotes when appropriate
+3. Provide specific page numbers or locations when available
+
+If the context doesn't contain relevant information, explicitly state that you are using your general knowledge instead of document-specific information.
+
+Context:
+{context}
+
+Question: {query}
+
+Remember: Always specify your sources! Start with "Based on the provided documents..." if using context, or "Based on my general knowledge..." if not."""
 
     async def create_message(
             self,
@@ -85,34 +98,39 @@ class ChatService:
             model_config: dict,
             max_history_messages: int = 10
     ) -> AsyncGenerator[str, None]:
-        """Create a message and stream the response with conversation history."""
-        print("Starting create_message with config:", model_config)
+        """Create a message with RAG integration and stream the response."""
+        print("Starting create_message with RAG integration")
         chat = self.get_chat(chat_id)
         response_content = ""
 
         try:
-            # Get existing messages for the chat
+            # Get conversation history
             existing_messages = self.db.query(Message) \
                 .filter(Message.chat_id == chat_id) \
                 .order_by(Message.timestamp.asc()) \
                 .all()
 
-            # Format conversation history
             conversation_history = self._format_chat_history(
                 existing_messages,
                 max_history_messages
             )
+
+            # Retrieve relevant context from documents
+            print("Retrieving relevant context for query:", content)
+            relevant_context = await self.rag_processor.get_relevant_context(
+                query=content,
+                top_k=3  # Adjust based on your needs
+            )
+
+            # Create RAG-enhanced prompt
+            enhanced_prompt = self._create_rag_prompt(content, relevant_context)
+            print("Enhanced prompt created with context")
 
             # Get saved model config
             provider = model_config["provider"]
             saved_config = self.model_config_service.get_config(provider)
             if not saved_config:
                 raise ValueError(f"No configuration found for provider {provider}")
-
-            # Determine model name
-            model_name = model_config.get("model")
-            if not model_name:
-                raise ValueError(f"No model name provided for provider {provider}")
 
             # Create user message
             user_message = Message(
@@ -122,39 +140,42 @@ class ChatService:
                 content=content,
                 timestamp=datetime.utcnow(),
                 model_provider=provider,
-                model_name=model_name,
+                model_name=model_config.get("model", ""),
                 temperature=model_config["temperature"]
             )
             self.db.add(user_message)
             self.db.commit()
 
-            # Initialize appropriate LLM service using saved config
+            # Initialize LLM service
             llm_service = await create_llm_service(
                 provider=provider,
-                api_key=saved_config.api_key,  # Use saved API key instead of from request
-                model=model_name
+                api_key=saved_config.api_key,
+                model=model_config.get("model")
             )
 
-            # Prepare LLM config
+            # Prepare LLM config with enhanced system message
+            system_message = saved_config.system_message or ""
+            rag_system_message = f"{system_message}\n\nImportant: When responding, always clearly indicate whether you are using information from the provided documents (citing specific sources) or your general knowledge."
+
             llm_config = LLMConfig(
-                model=model_name,
+                model=model_config.get("model", ""),
                 temperature=model_config["temperature"],
                 top_p=1.0,
                 stop_sequences=[],
-                system_message=saved_config.system_message,  # Add this line
+                system_message=rag_system_message,
                 extra_params={}
             )
 
-            # Stream response from LLM with conversation history
+            # Stream response from LLM with enhanced prompt
             async for chunk in llm_service.generate_stream(
-                    content,
+                    enhanced_prompt,
                     llm_config,
                     context=conversation_history
             ):
                 response_content += chunk
                 yield chunk
 
-            # After streaming is complete, save the assistant message
+            # Save assistant message
             assistant_message = Message(
                 id=str(uuid.uuid4()),
                 chat_id=chat_id,
@@ -162,15 +183,14 @@ class ChatService:
                 content=response_content,
                 timestamp=datetime.utcnow(),
                 model_provider=provider,
-                model_name=model_name,
+                model_name=model_config.get("model", ""),
                 temperature=model_config["temperature"]
             )
             self.db.add(assistant_message)
             self.db.commit()
 
         except Exception as e:
-            print(f"Error in message generation: {str(e)}")
-            # If there's an error, we should still save what we have
+            print(f"Error in RAG-enhanced message generation: {str(e)}")
             if response_content:
                 assistant_message = Message(
                     id=str(uuid.uuid4()),
@@ -179,7 +199,7 @@ class ChatService:
                     content=response_content,
                     timestamp=datetime.utcnow(),
                     model_provider=provider,
-                    model_name=model_name,
+                    model_name=model_config.get("model", ""),
                     temperature=model_config["temperature"]
                 )
                 self.db.add(assistant_message)

@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     MILVUS_COLLECTION: str = "document_chunks"
     MILVUS_VECTOR_DIM: int = 4096  # Matches Llama2 embedding dimension
 
+    # RAG settings
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+
     # Vector search configuration
     VECTOR_SIMILARITY_METRIC: str = "COSINE"
     VECTOR_TOP_K: int = 3

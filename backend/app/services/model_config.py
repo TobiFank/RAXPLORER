@@ -16,6 +16,10 @@ class ModelConfigService:
     def __init__(self, db: Session):
         self.db = db
 
+    def get_default_config(self) -> Optional[ModelConfig]:
+        """Get the first available model config as default"""
+        return self.db.query(ModelConfig).first()
+
     async def _check_ollama_status(self, client: httpx.AsyncClient) -> Tuple[bool, Optional[str]]:
         """Check if Ollama service is running and accessible"""
         try:
