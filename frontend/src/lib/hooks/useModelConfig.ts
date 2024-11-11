@@ -2,20 +2,20 @@
 'use client';
 
 import {useEffect, useState, useCallback} from "react";
-import {modelApi, ModelConfig} from "@/lib/api";
-import {Provider} from "@/lib/types";
+import {modelApi} from "@/lib/api";
+import { Provider, ModelConfig, MODEL_INFORMATION } from '@/lib/types';
 
 const defaultConfigs: Record<Provider, ModelConfig> = {
     claude: {
         provider: 'claude',
-        model: 'claude-3-opus-20240229',
+        model: MODEL_INFORMATION.claude.defaultModel,
         temperature: 0.7,
         apiKey: '',
         systemMessage: '',
     },
     chatgpt: {
         provider: 'chatgpt',
-        model: 'gpt-4o',
+        model: MODEL_INFORMATION.chatgpt.defaultModel,
         temperature: 0.7,
         apiKey: '',
         systemMessage: '',

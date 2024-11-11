@@ -1,7 +1,9 @@
 // src/lib/hooks/useChat.ts
 
 import {useEffect, useState} from 'react';
-import {Chat, chatApi, ChatMessage, ModelConfig} from '../api';
+import {chatApi} from '../api';
+import type {Chat, ChatMessage, ModelConfig} from '@/lib/types';
+
 
 export function useChat() {
     const [chats, setChats] = useState<Chat[]>([]);

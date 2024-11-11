@@ -11,7 +11,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
-import {Provider} from "@/lib/types";
+import {MODEL_INFORMATION, Provider} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -260,25 +260,19 @@ const ChatInterface = () => {
                                         <SelectContent>
                                             {modelConfig.provider === 'claude' ? (
                                                 <>
-                                                    <SelectItem value="claude-3-opus-20240229">Claude 3
-                                                        Opus</SelectItem>
-                                                    <SelectItem value="claude-3-sonnet-20240229">Claude 3
-                                                        Sonnet</SelectItem>
-                                                    <SelectItem value="claude-3-haiku-20240307">Claude 3
-                                                        Haiku</SelectItem>
-                                                    <SelectItem value="claude-3-5-sonnet-20241022">Claude 3.5
-                                                        Sonnet</SelectItem>
-                                                    <SelectItem value="claude-3-5-haiku-20241022">Claude 3.5
-                                                        Haiku</SelectItem>
+                                                    {MODEL_INFORMATION.claude.models.map(([value, label]) => (
+                                                        <SelectItem key={value} value={value}>
+                                                            {label}
+                                                        </SelectItem>
+                                                    ))}
                                                 </>
                                             ) : (
                                                 <>
-                                                    <SelectItem value="gpt-4o">GPT-4 Omni</SelectItem>
-                                                    <SelectItem value="gpt-4o-mini">GPT-4 Omni Mini</SelectItem>
-                                                    <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                                                    <SelectItem value="gpt-4-0125-preview">GPT-4 Turbo
-                                                        Preview</SelectItem>
-                                                    <SelectItem value="gpt-3.5-turbo-0125">GPT-3.5 Turbo</SelectItem>
+                                                    {MODEL_INFORMATION.chatgpt.models.map(([value, label]) => (
+                                                        <SelectItem key={value} value={value}>
+                                                            {label}
+                                                        </SelectItem>
+                                                    ))}
                                                 </>
                                             )}
                                         </SelectContent>

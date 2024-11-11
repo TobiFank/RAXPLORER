@@ -2,35 +2,11 @@
 
 import axios from 'axios';
 
-// Types
-export interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: string;
-}
-
-export interface Chat {
-    id: string;
-    title: string;
-    messages: ChatMessage[];
-    createdAt: string;
-}
-
-export interface FileMetadata {
-    id: string;
-    name: string;
-    size: string;
-    pages: number;
-    uploadedAt: string;
-}
-
-export interface ModelConfig {
-    provider: 'claude' | 'chatgpt' | 'ollama';
-    apiKey?: string;
-    model: string;
-    temperature: number;
-    systemMessage?: string;
-}
+import type {
+    Chat,
+    FileMetadata,
+    ModelConfig
+} from './types';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
