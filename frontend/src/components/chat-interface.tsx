@@ -275,16 +275,17 @@ const ChatInterface = () => {
                                     <label className="text-sm font-medium">API Key</label>
                                     <Input
                                         type="password"
-                                        placeholder={`Enter your ${modelConfig.provider === 'claude' ? 'Anthropic' : 'OpenAI'} API key`}
+                                        placeholder="Enter your API key"  // Make this static to avoid hydration issues
                                         value={modelConfig.apiKey || ''}
                                         onChange={(e) => updateDraft({
                                             apiKey: e.target.value
                                         })}
                                     />
+                                    {/* Move the provider-specific text to client-side only */}
                                     <p className="text-xs text-gray-500">
-                                        {modelConfig.provider === 'claude'
-                                            ? 'Get your API key from console.anthropic.com'
-                                            : 'Get your API key from platform.openai.com'}
+                                        Get your API key from {modelConfig.provider === 'claude'
+                                        ? 'console.anthropic.com'
+                                        : 'platform.openai.com'}
                                     </p>
                                 </div>
                             )}
@@ -472,7 +473,7 @@ const ChatInterface = () => {
             <div className="flex-1 flex flex-col">
                 {/* Chat Messages */}
                 <div className="flex-1 p-6 overflow-y-auto space-y-6">
-                    {messages.map((message, index) => (
+                    {Array.isArray(messages) && messages.map((message, index) => (
                         <div
                             key={index}
                             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}

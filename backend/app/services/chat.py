@@ -35,7 +35,21 @@ class ChatService:
         return chat
 
     def list_chats(self) -> List[Chat]:
-        return self.db.query(Chat).order_by(Chat.created_at.desc()).all()
+        chats = self.db.query(Chat).order_by(Chat.created_at.desc()).all()
+
+        # Add computed properties for each chat
+        for chat in chats:
+            # Add message_count as a property
+            setattr(chat, 'message_count', len(chat.messages))
+
+            # Optionally, add last_message if you want to use it
+            last_message = (self.db.query(Message)
+                            .filter(Message.chat_id == chat.id)
+                            .order_by(Message.timestamp.desc())
+                            .first())
+            setattr(chat, 'last_message', last_message.content if last_message else None)
+
+        return chats
 
     def update_chat(self, chat_id: str, chat_update: ChatUpdate) -> Chat:
         chat = self.get_chat(chat_id)
