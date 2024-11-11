@@ -17,6 +17,25 @@ export function useChat() {
         loadChats();
     }, []);
 
+    useEffect(() => {
+        if (activeChat) {
+            loadChatMessages(activeChat);
+        }
+    }, [activeChat]);
+
+    const loadChatMessages = async (chatId: string) => {
+        try {
+            setIsLoading(true);
+            const chat = await chatApi.getChat(chatId);
+            setMessages(chat.messages || []);
+        } catch (err) {
+            setError('Failed to load chat messages');
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Load chats from the backend
     const loadChats = async () => {
         try {
@@ -25,7 +44,6 @@ export function useChat() {
             setChats(loadedChats);
             if (loadedChats.length > 0 && !activeChat) {
                 setActiveChat(loadedChats[0].id);
-                setMessages(loadedChats[0].messages);
             }
         } catch (err) {
             setError('Failed to load chats');
@@ -93,7 +111,6 @@ export function useChat() {
             setIsLoading(true);
             let chatId = activeChat;
 
-            // If no active chat, create one and wait for it
             if (!chatId) {
                 console.log("No active chat, creating one...");
                 try {
@@ -115,7 +132,8 @@ export function useChat() {
                 content,
                 timestamp: new Date().toISOString(),
             };
-            setMessages(prev => [...prev, userMessage]);
+            // Modified this line to ensure prev is treated as an array
+            setMessages(prev => Array.isArray(prev) ? [...prev, userMessage] : [userMessage]);
             console.log('Added user message to state:', userMessage);
 
             // Get streaming response using the guaranteed chat ID
@@ -129,7 +147,8 @@ export function useChat() {
                 content: '',
                 timestamp: new Date().toISOString(),
             };
-            setMessages(prev => [...prev, assistantPlaceholder]);
+            // Modified this line to ensure prev is treated as an array
+            setMessages(prev => Array.isArray(prev) ? [...prev, assistantPlaceholder] : [userMessage, assistantPlaceholder]);
             console.log('Added assistant placeholder to state');
 
             // Process the stream
@@ -137,13 +156,16 @@ export function useChat() {
             for await (const chunk of stream) {
                 console.log('Received chunk:', chunk);
                 assistantMessage += chunk;
-                setMessages(prev => [
-                    ...prev.slice(0, -1),
-                    {
-                        ...assistantPlaceholder,
-                        content: assistantMessage,
-                    },
-                ]);
+                setMessages(prev => {
+                    if (!Array.isArray(prev)) return [userMessage, { ...assistantPlaceholder, content: assistantMessage }];
+                    return [
+                        ...prev.slice(0, -1),
+                        {
+                            ...assistantPlaceholder,
+                            content: assistantMessage,
+                        },
+                    ];
+                });
             }
 
             // Update chats list
