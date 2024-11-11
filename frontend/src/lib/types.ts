@@ -52,6 +52,11 @@ export interface EditState {
     title: string;
 }
 
+export interface ModelConfigError {
+    message: string;
+    details?: string[];
+}
+
 // Frontend-only model information
 export const MODEL_INFORMATION = {
     claude: {

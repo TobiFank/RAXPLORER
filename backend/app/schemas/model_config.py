@@ -29,6 +29,7 @@ class ModelConfigCreate(ModelConfigBase):
 class ModelConfigResponse(ModelConfigBase):
     id: str
     updated_at: datetime
+    api_key: Optional[str] = None
 
     class Config:
         from_attributes = True

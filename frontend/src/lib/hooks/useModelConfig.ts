@@ -3,7 +3,7 @@
 
 import {useEffect, useState, useCallback} from "react";
 import {modelApi} from "@/lib/api";
-import { Provider, ModelConfig, MODEL_INFORMATION } from '@/lib/types';
+import {Provider, ModelConfig, MODEL_INFORMATION, ModelConfigError} from '@/lib/types';
 
 const defaultConfigs: Record<Provider, ModelConfig> = {
     claude: {
@@ -28,63 +28,21 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
     }
 };
 
-const STORAGE_KEY = 'modelConfigs';  // Changed to be more explicit
 const ACTIVE_PROVIDER_KEY = 'activeProvider';
 
-// Helper function to safely access localStorage
-const getStorageValue = <T>(key: string, defaultValue: T): T => {
-    if (typeof window === 'undefined') {
-        return defaultValue;
-    }
-    try {
-        const item = window.localStorage.getItem(key);
-        return item ? JSON.parse(item) : defaultValue;
-    } catch (error) {
-        console.warn(`Error reading localStorage key "${key}":`, error);
-        return defaultValue;
-    }
-};
-
-// Helper function to safely set localStorage
-const setStorageValue = <T>(key: string, value: T): void => {
-    if (typeof window !== 'undefined') {
-        try {
-            window.localStorage.setItem(key, JSON.stringify(value));
-        } catch (error) {
-            console.warn(`Error setting localStorage key "${key}":`, error);
-        }
-    }
-};
-
-export interface ModelConfigError {
-    message: string;
-    details?: string[];
-}
-
 export function useModelConfig() {
-    // Store configurations for all providers
-    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(() => {
-        const savedConfigs = getStorageValue<Record<Provider, ModelConfig>>(STORAGE_KEY, defaultConfigs);
-        // Ensure all providers have configurations by merging with defaults
-        return Object.entries(defaultConfigs).reduce((acc, [provider, defaultConfig]) => ({
-            ...acc,
-            [provider]: {
-                ...defaultConfig,
-                ...(savedConfigs[provider as Provider] || {}),
-                provider: provider as Provider, // Ensure provider is always correct
-            }
-        }), {} as Record<Provider, ModelConfig>);
+    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(defaultConfigs);
+    const [activeProvider, setActiveProvider] = useState<Provider>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = window.localStorage.getItem(ACTIVE_PROVIDER_KEY);
+            return (saved ? JSON.parse(saved) : 'claude') as Provider;
+        }
+        return 'claude';
     });
-
-    const [activeProvider, setActiveProvider] = useState<Provider>(() =>
-        getStorageValue<Provider>(ACTIVE_PROVIDER_KEY, 'claude')
-    );
-
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<ModelConfigError | null>(null);
     const [isSaving, setIsSaving] = useState(false);
 
-    // Get the current model config for active provider
     const modelConfig = configs[activeProvider];
 
     // Load configurations from backend
@@ -93,23 +51,21 @@ export function useModelConfig() {
             setIsLoading(true);
             const allConfigs = await modelApi.getConfig();
 
-            // Merge saved configs with defaults while preserving provider-specific configs
-            const newConfigs = Object.entries(defaultConfigs).reduce((acc, [provider, defaultConfig]) => {
-                const savedConfig = allConfigs.find(c => c.provider === provider);
-                return {
-                    ...acc,
-                    [provider]: {
-                        ...defaultConfig,
-                        ...(savedConfig || {}),
-                        provider: provider as Provider,
-                    }
-                };
-            }, {} as Record<Provider, ModelConfig>);
+            // Convert array of configs to Record<Provider, ModelConfig>
+            const newConfigs = {...defaultConfigs};
+            allConfigs.forEach(config => {
+                if (config.provider) {
+                    newConfigs[config.provider] = {
+                        ...defaultConfigs[config.provider],
+                        ...config
+                    };
+                }
+            });
 
             setConfigs(newConfigs);
-            setStorageValue(STORAGE_KEY, newConfigs);
             setError(null);
         } catch (err) {
+            console.error('Failed to load model configuration:', err);
             setError({message: 'Failed to load model configuration'});
         } finally {
             setIsLoading(false);
@@ -120,28 +76,25 @@ export function useModelConfig() {
         loadConfig();
     }, [loadConfig]);
 
-    // Update configuration for a specific provider
     const updateDraft = useCallback((updates: Partial<ModelConfig>) => {
         setConfigs(prev => {
-            // Only update the specific provider's config
             const targetProvider = updates.provider || activeProvider;
-            const newConfigs = {
+            return {
                 ...prev,
                 [targetProvider]: {
                     ...prev[targetProvider],
                     ...updates,
-                    provider: targetProvider, // Ensure provider is always set correctly
+                    provider: targetProvider,
                 }
             };
-            setStorageValue(STORAGE_KEY, newConfigs);
-            return newConfigs;
         });
     }, [activeProvider]);
 
-    // Switch active provider without modifying configs
     const switchProvider = useCallback((provider: Provider) => {
         setActiveProvider(provider);
-        setStorageValue(ACTIVE_PROVIDER_KEY, provider);
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(ACTIVE_PROVIDER_KEY, JSON.stringify(provider));
+        }
         setError(null);
     }, []);
 
@@ -161,17 +114,11 @@ export function useModelConfig() {
 
             await modelApi.saveConfig(config);
 
-            // Update only the specific provider's config
             setConfigs(prev => ({
                 ...prev,
-                [config.provider]: {
-                    ...prev[config.provider],
-                    ...config,
-                    provider: config.provider,
-                }
+                [config.provider]: config
             }));
 
-            setStorageValue(STORAGE_KEY, configs);
             return true;
         } catch (err) {
             console.error('Save config error:', err);
