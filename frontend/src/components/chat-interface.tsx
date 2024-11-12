@@ -1,4 +1,5 @@
 'use client';
+// src/components/chat-interface.tsx
 
 import React, {useCallback, useState} from 'react';
 import {ChevronDown, FileText, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
@@ -126,22 +127,8 @@ const ChatInterface = () => {
             ? modelConfig.model?.trim() !== ''
             : modelConfig.apiKey?.trim() !== '';
 
-        console.log("Model settings validation:", {
-            provider: modelConfig.provider,
-            model: modelConfig.model,
-            isValid: isValid
-        });
-
         return isValid;
     }, [modelConfig]);
-
-    const isButtonDisabled = chatLoading || !validateModelSettings() || !inputText.trim();
-    console.log("Send button disabled state:", {
-        chatLoading,
-        modelSettingsValid: validateModelSettings(),
-        hasInputText: !!inputText.trim(),
-        finalDisabledState: isButtonDisabled
-    });
 
     const handleNewChat = async () => {
         console.log("Creating new chat");
@@ -553,14 +540,6 @@ const ChatInterface = () => {
                         {chatLoading ? (
                             <p>Sending message...</p>
                         ) : null}
-                        <pre className="mt-2 text-xs">
-    Debug info:
-    Provider: {modelConfig.provider}
-                            Model: {modelConfig.model}
-                            Valid: {String(validateModelSettings())}
-                            Loading: {String(chatLoading)}
-                            Has text: {String(!!inputText.trim())}
-</pre>
                     </div>
                 </div>
             </div>

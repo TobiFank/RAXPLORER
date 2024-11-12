@@ -1,5 +1,5 @@
-// src/lib/hooks/useModelConfig.ts
 'use client';
+// src/lib/hooks/useModelConfig.ts
 
 import {useEffect, useState, useCallback} from "react";
 import {modelApi} from "@/lib/api";
@@ -32,13 +32,15 @@ const ACTIVE_PROVIDER_KEY = 'activeProvider';
 
 export function useModelConfig() {
     const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(defaultConfigs);
-    const [activeProvider, setActiveProvider] = useState<Provider>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = window.localStorage.getItem(ACTIVE_PROVIDER_KEY);
-            return (saved ? JSON.parse(saved) : 'claude') as Provider;
+    const [activeProvider, setActiveProvider] = useState<Provider>('claude');
+
+    useEffect(() => {
+        const saved = window.localStorage.getItem(ACTIVE_PROVIDER_KEY);
+        if (saved) {
+            setActiveProvider(JSON.parse(saved) as Provider);
         }
-        return 'claude';
-    });
+    }, []);
+
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<ModelConfigError | null>(null);
     const [isSaving, setIsSaving] = useState(false);
