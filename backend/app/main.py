@@ -8,6 +8,11 @@ from app.core.middleware import ErrorHandlingMiddleware
 from app.utils.vector_store import MilvusVectorStore
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

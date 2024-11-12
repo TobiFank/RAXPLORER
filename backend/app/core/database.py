@@ -32,12 +32,6 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-# Initialize database tables
-def init_db() -> None:
-    """Initialize all database tables"""
-    Base.metadata.create_all(bind=engine)
-
-
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=4, max=10)

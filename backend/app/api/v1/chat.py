@@ -1,4 +1,5 @@
 # app/api/v1/chat.py
+import logging
 from typing import List, AsyncGenerator
 
 from app.core.config import settings
@@ -54,9 +55,12 @@ async def get_rag_processor(
         # Get the first available config as default
         default_config = model_config_service.get_default_config()
         if not default_config:
-            raise HTTPException(
-                status_code=500,
-                detail="No model configuration available"
+            # Use a fallback default configuration
+            from types import SimpleNamespace
+            default_config = SimpleNamespace(
+                provider="ollama",
+                model="llama2",
+                temperature=0.0
             )
         model_config = {
             "provider": default_config.provider,
@@ -138,8 +142,15 @@ async def create_chat(
 async def list_chats(
         db: Session = Depends(get_db)
 ):
-    chat_service = await get_chat_service(db)
-    return chat_service.list_chats()
+    try:
+        chat_service = await get_chat_service(db)
+        return chat_service.list_chats()
+    except Exception as e:
+        logging.error(f"Error listing chats: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
 
 
 @router.get("/chats/{chat_id}", response_model=ChatResponse)
