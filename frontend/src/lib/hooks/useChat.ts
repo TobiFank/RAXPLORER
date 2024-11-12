@@ -1,6 +1,6 @@
 // src/lib/hooks/useChat.ts
 
-import {useEffect, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {chatApi} from '../api';
 import type {Chat, ChatMessage, ModelConfig} from '@/lib/types';
 
@@ -11,11 +11,6 @@ export function useChat() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-
-    // Load initial chats
-    useEffect(() => {
-        loadChats();
-    }, []);
 
     useEffect(() => {
         if (activeChat) {
@@ -37,7 +32,7 @@ export function useChat() {
     };
 
     // Load chats from the backend
-    const loadChats = async () => {
+    const loadChats = useCallback(async () => {
         try {
             setIsLoading(true);
             const loadedChats = await chatApi.getChats();
@@ -46,17 +41,20 @@ export function useChat() {
                 setActiveChat(loadedChats[0].id);
             }
         } catch (err) {
-            // More specific error message for connection issues
             setError(err.message === 'Network Error'
                 ? 'Unable to connect to server. Please ensure the backend is running.'
                 : 'Failed to load chats');
             console.error(err);
-            // Initialize with empty chats array on error
             setChats([]);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [activeChat]);
+
+    // Load initial chats
+    useEffect(() => {
+        loadChats();
+    }, [loadChats]);
 
     // Create a new chat
     const createChat = async () => {

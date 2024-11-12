@@ -12,7 +12,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
-import {MODEL_INFORMATION, Provider, EditState, Chat} from "@/lib/types";
+import {MODEL_INFORMATION, Provider, Chat} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -31,19 +31,14 @@ const ChatInterface = () => {
 
     const {
         files,
-        isLoading: filesLoading,
-        error: filesError,
         uploadFile,
         deleteFile
     } = useFiles();
 
     const {
         modelConfig,
-        isLoading: configLoading,
         isSaving,
         error: configError,
-        updateConfig,
-        validateConfig,
         switchProvider,
         updateDraft,
         saveConfig
@@ -361,7 +356,7 @@ const ChatInterface = () => {
                                     rows={3}
                                 />
                                 <p className="text-xs text-gray-500">
-                                    Define the AI's behavior and context for this model
+                                    Define the AI&apos;s behavior and context for this model
                                 </p>
                             </div>
 
