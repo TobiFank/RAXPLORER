@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_V1_PREFIX = '/api/v1';
 
 console.log('API Configuration:', {
@@ -37,13 +37,24 @@ api.interceptors.response.use(
         return response;
     },
     error => {
-        console.error('API Error:', {
-            url: error.config?.url,
-            method: error.config?.method,
-            status: error.response?.status,
-            data: error.response?.data,
-            message: error.message
-        });
+        // More robust error handling
+        const errorDetails = {
+            url: error.config?.url || 'unknown',
+            method: error.config?.method || 'unknown',
+            status: error.response?.status || 'connection failed',
+            data: error.response?.data || null,
+            message: error.message || 'Unknown error'
+        };
+
+        // Only log if there are actual error details
+        if (errorDetails.status !== 'connection failed' && errorDetails.message !== 'Unknown error') {
+            console.error('API Error:', errorDetails);
+        }
+        // Add specific connection error handling
+        if (errorDetails.status === 'connection failed') {
+            console.warn('Backend connection failed. Please ensure the backend server is running at:', API_BASE_URL);
+        }
+
         return Promise.reject(error);
     }
 );

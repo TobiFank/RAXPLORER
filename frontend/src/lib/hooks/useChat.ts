@@ -46,8 +46,13 @@ export function useChat() {
                 setActiveChat(loadedChats[0].id);
             }
         } catch (err) {
-            setError('Failed to load chats');
+            // More specific error message for connection issues
+            setError(err.message === 'Network Error'
+                ? 'Unable to connect to server. Please ensure the backend is running.'
+                : 'Failed to load chats');
             console.error(err);
+            // Initialize with empty chats array on error
+            setChats([]);
         } finally {
             setIsLoading(false);
         }
