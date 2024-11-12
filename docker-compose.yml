@@ -79,7 +79,7 @@ services:
       - app-network
 
   standalone:
-    image: milvusdb/milvus:v2.4.9
+    image: milvusdb/milvus:v2.4.9-gpu
     command: [ "milvus", "run", "standalone" ]
     deploy:
       resources:
