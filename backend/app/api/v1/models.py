@@ -27,12 +27,6 @@ async def save_model_config(
         db: Session = Depends(get_db)
 ):
     service = ModelConfigService(db)
-
-    # Validate first
-    is_valid, issues = await service.validate_config(config)
-    if not is_valid:
-        raise HTTPException(400, f"Invalid configuration: {', '.join(issues)}")
-
     return await service.save_config(config)
 
 @router.get("/config/{provider}", response_model=ModelConfigResponse)
