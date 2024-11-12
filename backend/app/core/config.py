@@ -1,4 +1,5 @@
 # app/core/config.py
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
@@ -26,12 +27,6 @@ class Settings(BaseSettings):
     # Security
     RATE_LIMIT_PER_MINUTE: int = 100
 
-    # Milvus Configuration
-    MILVUS_HOST: str = "localhost"
-    MILVUS_PORT: int = 19530
-    MILVUS_COLLECTION: str = "document_chunks"
-    MILVUS_VECTOR_DIM: int = 4096  # Matches Llama2 embedding dimension
-
     # RAG settings
     RAG_CHUNK_SIZE: int = 1000
     RAG_CHUNK_OVERLAP: int = 200
@@ -39,6 +34,17 @@ class Settings(BaseSettings):
     # Vector search configuration
     VECTOR_SIMILARITY_METRIC: str = "COSINE"
     VECTOR_TOP_K: int = 3
+
+    # Embedding Model Configuration
+    EMBEDDING_PROVIDER: str = "ollama"  # For future when we add more providers
+    EMBEDDING_MODEL: str = Field(default="mxbai-embed-large")  # Will use env var if present
+    EMBEDDING_MODEL_DIMENSION: int = Field(default=1024)
+
+    # Milvus Configuration
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
+    MILVUS_COLLECTION: str = "document_chunks"
+    MILVUS_VECTOR_DIM: int = EMBEDDING_MODEL_DIMENSION
 
     model_config = SettingsConfigDict(env_file=".env")
 

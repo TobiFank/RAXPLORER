@@ -150,7 +150,7 @@ class OllamaService(BaseLLMService):
             response = await self._client.post(
                 "/api/embeddings",
                 json={
-                    "model": config.model if config else "llama2",
+                    "model": settings.EMBEDDING_MODEL,  # Use dedicated embedding model
                     "prompt": text
                 }
             )

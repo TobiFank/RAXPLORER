@@ -3,6 +3,8 @@ from typing import List, Optional
 import numpy as np
 from app.services.llm.base import BaseLLMService, LLMConfig
 from .chunker import Chunk
+from app.core.config import settings
+
 
 class EmbeddingService:
     """Handles the generation and caching of embeddings"""
@@ -10,8 +12,8 @@ class EmbeddingService:
     def __init__(self, llm_service: BaseLLMService):
         self.llm_service = llm_service
         self._config = LLMConfig(
-            model="llama2",  # Default model for embeddings
-            temperature=0.0
+            model=settings.EMBEDDING_MODEL,  # Use configured embedding model
+            temperature=0.0  # Keep this for consistency
         )
 
     async def generate_embeddings(
@@ -21,13 +23,12 @@ class EmbeddingService:
     ) -> List[tuple[Chunk, List[float]]]:
         """Generate embeddings for a list of chunks"""
         results = []
-        embedding_config = config or self._config
 
         for chunk in chunks:
             try:
                 embedding = await self.llm_service.get_embedding(
                     chunk.content,
-                    embedding_config
+                    self._config  # Always use our embedding config
                 )
                 results.append((chunk, embedding))
             except Exception as e:
