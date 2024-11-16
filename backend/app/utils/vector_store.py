@@ -52,7 +52,7 @@ class MilvusVectorStore(VectorStore):
             host: str = "localhost",
             port: int = 19530,
             collection_name: str = "document_chunks",
-            dim: int = 4096,  # Default for Llama2 embeddings
+            dim: int = 1024,
             similarity_metric: str = "COSINE"
     ):
         self.host = host
@@ -98,7 +98,7 @@ class MilvusVectorStore(VectorStore):
                     index_params = {
                         "metric_type": self.similarity_metric,
                         "index_type": "IVF_FLAT",
-                        "params": {"nlist": 1024}
+                        "params": {"nlist": 4096}
                     }
                     self._collection.create_index(
                         field_name="embedding",
@@ -227,3 +227,13 @@ class MilvusVectorStore(VectorStore):
         await self._release_collection()
         if self._initialized:
             connections.disconnect("default")
+
+    async def cleanup_collection(self) -> None:
+        """Drop the existing collection to allow recreation with new settings."""
+        try:
+            if utility.has_collection(self.collection_name):
+                utility.drop_collection(self.collection_name)
+                self._initialized = False
+                self._is_loaded = False
+        except Exception as e:
+            raise VectorStoreError(f"Failed to cleanup collection: {str(e)}")

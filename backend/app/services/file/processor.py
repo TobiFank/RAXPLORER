@@ -14,6 +14,10 @@ from app.models.file import File
 from app.schemas.file_processing import ProcessedFile
 from app.services.rag.processor import RAGProcessor
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class FileProcessor:
     """Handles file processing and text extraction"""
 
@@ -126,11 +130,15 @@ class FileProcessor:
     ) -> Tuple[str, int]:
         """Extract text from different file types"""
         try:
+            logger.info(f"Extracting text")
             if mime_type == 'application/pdf':
+                logger.info(f"Extracting text from {file_path}")
                 return self._extract_text_from_pdf(file_path)
             elif mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                logger.info(f"Extracting text from {file_path}")
                 return self._extract_text_from_docx(file_path)
             elif mime_type.startswith('image/'):
+                logger.info(f"Extracting text from {file_path}")
                 return self._extract_text_from_image(file_path)
             else:
                 raise HTTPException(400, f"Unsupported file type: {mime_type}")

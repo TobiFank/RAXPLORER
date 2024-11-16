@@ -1,6 +1,6 @@
 // src/lib/hooks/useChat.ts
 
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {chatApi} from '../api';
 import type {Chat, ChatMessage, ModelConfig} from '@/lib/types';
 
@@ -11,12 +11,20 @@ export function useChat() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const skipLoadRef = useRef(false);
+
+    const switchChat = async (chatId: string, skipLoad = false) => {
+        skipLoadRef.current = skipLoad;
+        setActiveChat(chatId);
+    };
 
     useEffect(() => {
-        if (activeChat) {
+        if (activeChat && !skipLoadRef.current) {
             loadChatMessages(activeChat);
         }
+        skipLoadRef.current = false;  // Reset after use
     }, [activeChat]);
+
 
     const loadChatMessages = async (chatId: string) => {
         try {
@@ -91,21 +99,6 @@ export function useChat() {
         }
     };
 
-    // Switch active chat
-    const switchChat = async (chatId: string) => {
-        try {
-            setIsLoading(true);
-            const chat = await chatApi.getChat(chatId);
-            setActiveChat(chatId);
-            setMessages(chat.messages);
-        } catch (err) {
-            setError('Failed to switch chat');
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     // Send a message
     const sendMessage = async (content: string, modelConfig: ModelConfig) => {
         if (!content.trim()) return;
@@ -120,8 +113,8 @@ export function useChat() {
                     const newChat = await chatApi.createChat();
                     chatId = newChat.id;
                     setChats(prev => [newChat, ...prev]);
-                    setActiveChat(chatId);
-                    console.log("Created new chat:", chatId);
+                    setMessages([]); // Initialize messages
+                    await switchChat(chatId, true); // Use skipLoad
                 } catch (err) {
                     console.error("Failed to create chat:", err);
                     setError('Failed to create new chat');

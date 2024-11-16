@@ -11,6 +11,10 @@ from .base import (
     ConnectionError, GenerationError
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class OllamaService(BaseLLMService):
     def __init__(
             self,
@@ -38,6 +42,7 @@ class OllamaService(BaseLLMService):
         try:
             await self.health_check()
             self._initialized = True
+            logger.info("Ollama service initialized")
         except Exception as e:
             await self._client.aclose()
             raise ConnectionError(f"Failed to initialize Ollama service: {str(e)}")
@@ -85,6 +90,8 @@ class OllamaService(BaseLLMService):
             )
             response.raise_for_status()
             data = response.json()
+
+            logger.debug(f"Generated response")
 
             return LLMResponse(
                 content=data["response"],
@@ -147,25 +154,32 @@ class OllamaService(BaseLLMService):
             await self.initialize()
 
         try:
+            # Generate embedding using the embeddings endpoint - no need to pull/unload
+            # as Ollama handles this automatically
             response = await self._client.post(
                 "/api/embeddings",
                 json={
-                    "model": settings.EMBEDDING_MODEL,  # Use dedicated embedding model
+                    "model": settings.EMBEDDING_MODEL,
                     "prompt": text
                 }
             )
             response.raise_for_status()
             data = response.json()
+
             return data["embedding"]
         except Exception as e:
             raise GenerationError(f"Failed to generate embedding: {str(e)}")
 
-    async def __aenter__(self):
-        """Support async context manager."""
-        await self.initialize()
-        return self
+    async def unload_model(self, model_name: str) -> None:
+        """Unload a model from GPU memory."""
+        if not self._initialized:
+            await self.initialize()
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Cleanup on exit."""
-        if self._client:
-            await self._client.aclose()
+        try:
+            response = await self._client.post(
+                "/api/unload",
+                json={"model": model_name}
+            )
+            response.raise_for_status()
+        except Exception as e:
+            raise ConnectionError(f"Failed to unload model {model_name}: {str(e)}")

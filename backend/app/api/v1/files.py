@@ -11,6 +11,10 @@ from app.services.rag.processor import RAGProcessor
 from fastapi import APIRouter, Depends, UploadFile, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
@@ -39,17 +43,20 @@ async def upload_file(
             uploaded_at=datetime.utcnow(),
             vectorized=False  # Will be updated after background processing
         )
+        logger.info(f"Uploading file {db_file.id} ({db_file.name})")
         db.add(db_file)
         db.commit()
         db.refresh(db_file)
 
         # Start background processing
+        logger.info(f"Starting background processing for file {db_file.id}")
         background_tasks.add_task(
             file_processor.process_and_vectorize,
             processed_file,
             db_file.id,
             db
         )
+        logger.info(f"Background processing finished")
 
         return FileResponse(
             id=db_file.id,

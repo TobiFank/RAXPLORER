@@ -10,7 +10,7 @@ from app.utils.vector_store import VectorStore
 
 from .chunker import TextChunker, Chunk
 from .embeddings import EmbeddingService
-from .retriever import Retriever
+from .retriever import Retriever, RetrievalResult
 
 
 class RAGProcessor:
