@@ -1,5 +1,6 @@
 # app/services/rag/processor.py
 import asyncio
+import logging
 import uuid
 from datetime import datetime
 from typing import List, Optional
@@ -11,8 +12,6 @@ from app.utils.vector_store import VectorStore
 from .chunker import TextChunker, Chunk
 from .embeddings import EmbeddingService
 from .retriever import Retriever, RetrievalResult
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +25,21 @@ class RAGProcessor:
             vector_store: VectorStore,
             chunk_size: int = 1000,
             chunk_overlap: int = 200,
-            batch_size: int = 10  # Process chunks in batches
+            batch_size: int = 10
     ):
         self.chunker = TextChunker(chunk_size, chunk_overlap)
         self.embedding_service = EmbeddingService(llm_service)
+        self.vector_store = vector_store
         self.retriever = Retriever(vector_store)
         self.llm_service = llm_service
-        self.vector_store = vector_store
         self.batch_size = batch_size
         self._processing_statuses: dict[str, ProcessingStatus] = {}
+
+    async def initialize(self):
+        """Initialize RAG processor and ensure vector store is ready"""
+        if not getattr(self.vector_store, '_initialized', False):
+            await self.vector_store.initialize()
+            logger.info("Vector store initialized in RAG processor")
 
     def _create_processing_status(self, document_id: str, total_chunks: int) -> ProcessingStatus:
         """Create initial processing status for a document"""
@@ -120,7 +125,8 @@ class RAGProcessor:
                 # Add a small delay between batches to allow memory cleanup
                 await asyncio.sleep(0.1)
 
-            logger.info(f"Processed {status.processed_chunks} out of {status.total_chunks} chunks for document {document_id}")
+            logger.info(
+                f"Processed {status.processed_chunks} out of {status.total_chunks} chunks for document {document_id}")
 
             # Mark processing as complete
             status.status = "completed"

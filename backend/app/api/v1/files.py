@@ -6,7 +6,7 @@ from app.api.v1.deps import get_db, get_file_processor, get_rag_processor
 from app.core.config import settings
 from app.models.file import File
 from app.schemas.file import FileResponse, FileListResponse
-from app.services.file.processor import FileProcessor  # Added this import
+from app.services.file.processor import FileProcessor
 from app.services.rag.processor import RAGProcessor
 from fastapi import APIRouter, Depends, UploadFile, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session

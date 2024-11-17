@@ -1,19 +1,19 @@
 # app/services/llm/ollama.py
-import asyncio
-import httpx
 import json
-from typing import AsyncGenerator, Optional, Dict, Any
+import logging
+from typing import AsyncGenerator, Optional
+
+import httpx
+from app.core.config import settings
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from app.core.config import settings
 from .base import (
     BaseLLMService, LLMConfig, LLMResponse, TokenUsage,
     ConnectionError, GenerationError
 )
 
-import logging
-
 logger = logging.getLogger(__name__)
+
 
 class OllamaService(BaseLLMService):
     def __init__(
@@ -38,8 +38,20 @@ class OllamaService(BaseLLMService):
             timeout=self.timeout
         )
 
-        # Check connection and pull model if needed
+        # Check connection and pull models if needed
         try:
+            # Check currently available models
+            response = await self._client.get("/api/tags")
+            response.raise_for_status()
+            available_models = [model['name'] for model in response.json().get('models', [])]
+
+            # Pull embedding model if not available
+            if settings.EMBEDDING_MODEL not in available_models:
+                logger.info(f"Pulling embedding model {settings.EMBEDDING_MODEL}...")
+                response = await self._client.post("/api/pull", json={"name": settings.EMBEDDING_MODEL})
+                response.raise_for_status()
+                logger.info(f"Successfully pulled {settings.EMBEDDING_MODEL}")
+
             await self.health_check()
             self._initialized = True
             logger.info("Ollama service initialized")
