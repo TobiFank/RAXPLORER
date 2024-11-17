@@ -1,6 +1,11 @@
 # app/services/rag/chunker.py
+import logging
 from typing import List
+
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
 
 class Chunk(BaseModel):
     """Represents a text chunk with metadata"""
@@ -9,6 +14,7 @@ class Chunk(BaseModel):
     chunk_index: int
     source_id: str
     total_chunks: int
+
 
 class TextChunker:
     """Handles text chunking with different strategies"""
@@ -25,7 +31,9 @@ class TextChunker:
 
     def chunk_text(self, text: str, source_id: str, metadata: dict = None) -> List[Chunk]:
         """Split text into overlapping chunks"""
+        logger.info(f"Start chunking")
         if not text.strip():
+            logger.warning("Empty text provided for chunking")
             return []
 
         chunks = []
@@ -33,24 +41,35 @@ class TextChunker:
         text_length = len(text)
         chunk_index = 0
 
-        while start < text_length:
-            # Find the end of the chunk
-            end = start + self.chunk_size
+        logger.info(f"Chunking text with {len(text)} characters")
 
-            if end >= text_length:
-                # Last chunk
-                chunk_text = text[start:text_length].strip()
+        while start < text_length:
+            # Calculate the maximum possible end point
+            end = min(start + self.chunk_size, text_length)
+
+            if end == text_length:
+                # Handle last chunk
+                chunk_text = text[start:end].strip()
             else:
-                # Find the last period or newline within chunk_size
+                # Try to find a natural break point
                 last_period = text.rfind('.', start, end)
                 last_newline = text.rfind('\n', start, end)
-                break_point = max(last_period, last_newline)
 
-                if break_point > start + self.min_chunk_size:
-                    end = break_point + 1
+                # Only consider break points that give us a reasonable chunk size
+                valid_break_points = []
+                if last_period > start + self.min_chunk_size:
+                    valid_break_points.append(last_period)
+                if last_newline > start + self.min_chunk_size:
+                    valid_break_points.append(last_newline)
+
+                if valid_break_points:
+                    # Use the latest valid break point
+                    end = max(valid_break_points) + 1
+                # If no valid break points, keep the calculated end (chunk_size or text_length)
 
                 chunk_text = text[start:end].strip()
 
+            # Only add non-empty chunks that meet minimum size
             if len(chunk_text) >= self.min_chunk_size:
                 chunks.append(Chunk(
                     content=chunk_text,
@@ -61,11 +80,24 @@ class TextChunker:
                 ))
                 chunk_index += 1
 
-            start = end - self.chunk_overlap
+            # Critical fix: Ensure we always move forward by at least min_chunk_size
+            # Calculate next start position
+            next_start = end - self.chunk_overlap
+
+            # If the overlap would cause us to move forward by less than min_chunk_size
+            # or even move backwards, force a minimum movement
+            if next_start <= start + self.min_chunk_size:
+                start = start + self.min_chunk_size
+            else:
+                start = next_start
+
+        logger.info(f"Created {len(chunks)} chunks")
+        logger.info("left while loop")
 
         # Update total_chunks
         total_chunks = len(chunks)
         for chunk in chunks:
             chunk.total_chunks = total_chunks
 
+        logger.info(f"End chunking")
         return chunks
