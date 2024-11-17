@@ -14,6 +14,10 @@ from pymilvus import (
     utility
 )
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class VectorStore(ABC):
     """Abstract base class for vector storage implementations."""
@@ -114,23 +118,34 @@ class MilvusVectorStore(VectorStore):
 
     async def _ensure_collection_loaded(self):
         """Ensure collection is loaded only when needed."""
+        logger.info("Ensuring collection is loaded")
         if not self._is_loaded:
+            logger.info("Loading collection")
             self._collection.load()
             self._is_loaded = True
+            logger.info("Collection loaded")
 
     async def _release_collection(self):
         """Release collection from memory."""
+        logger.info("Releasing collection")
         if self._is_loaded:
+            logger.info("Collection released")
             self._collection.release()
             self._is_loaded = False
+            logger.info("Collection released")
 
     async def store(self, doc_id: str, chunk: Chunk, embedding: List[float]) -> str:
         """Store a document chunk and its embedding in Milvus."""
+        logger.info(f"Storing chunk {chunk.chunk_index} for document {doc_id}")
         if not self._initialized:
+            logger.info("Initializing Milvus connection")
             await self.initialize()
+            logger.info("Milvus connection initialized")
 
+        logger.info("Storing chunk in Milvus")
         try:
             await self._ensure_collection_loaded()
+            logger.info("Collection loaded")
 
             # Prepare data
             data = [
@@ -142,11 +157,17 @@ class MilvusVectorStore(VectorStore):
                 [embedding]
             ]
 
+            logger.info("Data prepared")
+
             # Insert data
             self._collection.insert(data)
             self._collection.flush()
 
+            logger.info("Data inserted")
+
             await self._release_collection()
+
+            logger.info("Collection released")
             return data[0][0]  # Return the generated ID
 
         except Exception as e:

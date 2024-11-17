@@ -41,6 +41,7 @@ class FileProcessor:
                 "size": processed_file.size,
                 "pages": processed_file.page_count
             }
+            logger.info(f"Processing file {file_id}")
 
             # Process through RAG pipeline
             status = await self.rag_processor.process_document(
@@ -48,6 +49,7 @@ class FileProcessor:
                 metadata=metadata,
                 file_info=processed_file
             )
+            logger.info(f"RAG processing finished for file {file_id} with status {status.status}")
 
             if status.status == "completed":
                 # Update database status
@@ -55,6 +57,7 @@ class FileProcessor:
                 if file:
                     file.vectorized = True
                     db.commit()
+                    logger.info(f"File {file_id} vectorized successfully")
 
         except Exception as e:
             # Log error and update database status
@@ -99,6 +102,7 @@ class FileProcessor:
 
         # Save file temporarily
         file_path = self.upload_dir / file.filename
+        logger.info(f"Saving file to {file_path}")
         try:
             content = await file.read()
             mime_type = self._get_mime_type(content)
@@ -108,6 +112,7 @@ class FileProcessor:
 
             # Extract text based on file type
             text, page_count = await self._extract_text(file_path, mime_type)
+            logger.info(f"Text extracted from {file_path}")
 
             return ProcessedFile(
                 id=str(file_path.stem),
@@ -120,6 +125,7 @@ class FileProcessor:
             )
 
         finally:
+            logger.info(f"Cleaning up")
             if file_path.exists():
                 file_path.unlink()
 

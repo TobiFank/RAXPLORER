@@ -12,6 +12,10 @@ from .chunker import TextChunker, Chunk
 from .embeddings import EmbeddingService
 from .retriever import Retriever, RetrievalResult
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class RAGProcessor:
     """Main RAG pipeline coordinator with improved processing status tracking"""
@@ -56,13 +60,18 @@ class RAGProcessor:
     ):
         """Process a batch of chunks"""
         try:
+            logger.info(f"Processing chunks for document {document_id}")
             # Generate embeddings for the batch
             chunk_embeddings = await self.embedding_service.generate_embeddings(chunks)
+
+            logger.info(f"Generated embeddings for {len(chunk_embeddings)} chunks for document {document_id}")
 
             # Store each chunk and its embedding
             for chunk, embedding in chunk_embeddings:
                 await self.vector_store.store(document_id, chunk, embedding)
                 status.processed_chunks += 1
+
+            logger.info(f"Stored embeddings for {len(chunk_embeddings)} chunks for document {document_id}")
 
             # Force garbage collection after batch processing
             chunk_embeddings = None
@@ -79,6 +88,7 @@ class RAGProcessor:
     ) -> ProcessingStatus:
         """Process a document through the RAG pipeline with batched processing"""
         document_id = str(uuid.uuid4())
+        logger.info(f"Processing document {document_id}")
 
         try:
             # Create chunks
@@ -93,8 +103,11 @@ class RAGProcessor:
                 }
             )
 
+            logger.info(f"Created {len(chunks)} chunks for document {document_id}")
+
             # Initialize processing status
             status = self._create_processing_status(document_id, len(chunks))
+            logger.info(f"Processing status created for document {document_id} with status {status.status}")
 
             # Process chunks in batches
             for i in range(0, len(chunks), self.batch_size):
@@ -106,6 +119,8 @@ class RAGProcessor:
 
                 # Add a small delay between batches to allow memory cleanup
                 await asyncio.sleep(0.1)
+
+            logger.info(f"Processed {status.processed_chunks} out of {status.total_chunks} chunks for document {document_id}")
 
             # Mark processing as complete
             status.status = "completed"
