@@ -1,5 +1,5 @@
 # app/db/models.py
-from sqlalchemy import Column, String, DateTime, Integer, JSON
+from sqlalchemy import Column, String, DateTime, Integer, JSON, Float
 from sqlalchemy.sql import func
 from uuid import uuid4
 
@@ -28,6 +28,6 @@ class ModelConfigModel(Base):
 
     provider = Column(String, primary_key=True)
     model = Column(String, nullable=False)
-    temperature = Column(Integer, nullable=False)
+    temperature = Column(Float, nullable=False)
     system_message = Column(String)
     api_key = Column(String)

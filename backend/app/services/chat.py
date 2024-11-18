@@ -1,13 +1,16 @@
 # app/services/chat.py
 from datetime import datetime
-from typing import AsyncGenerator
+
 from fastapi import HTTPException
-from ..schemas.chat import Chat, Message
-from ..schemas.model import ModelConfig
-from ..db.models import ChatModel, FileModel
-from ..db.session import AsyncSession
+from sqlalchemy.sql import select
+
 from .llm import LLMService
 from .rag import RAGService
+from ..db.models import ChatModel, FileModel
+from ..db.session import AsyncSession
+from ..schemas.chat import Chat
+from ..schemas.model import ModelConfig
+
 
 class ChatService:
     def __init__(self, db: AsyncSession, llm_service: LLMService, rag_service: RAGService):
@@ -27,7 +30,8 @@ class ChatService:
         )
 
     async def get_chats(self) -> list[Chat]:
-        chats = await self.db.query(ChatModel).order_by(ChatModel.created_at.desc()).all()
+        result = await self.db.execute(select(ChatModel).order_by(ChatModel.created_at.desc()))
+        chats = result.scalars().all()
         return [
             Chat(
                 id=chat.id,
@@ -38,7 +42,8 @@ class ChatService:
         ]
 
     async def get_chat(self, chat_id: str) -> Chat:
-        chat = await self.db.query(ChatModel).get(chat_id)
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
 
@@ -50,13 +55,15 @@ class ChatService:
         )
 
     async def delete_chat(self, chat_id: str):
-        chat = await self.db.query(ChatModel).get(chat_id)
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
         if chat:
             await self.db.delete(chat)
             await self.db.commit()
 
     async def update_title(self, chat_id: str, title: str) -> Chat:
-        chat = await self.db.query(ChatModel).get(chat_id)
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
 
@@ -70,47 +77,55 @@ class ChatService:
             created_at=chat.created_at
         )
 
-    async def stream_response(
-            self,
-            chat_id: str,
-            content: str,
-            model_config: ModelConfig
-    ) -> AsyncGenerator[str, None]:
-        chat = await self.db.query(ChatModel).get(chat_id)
+    async def stream_response(self, chat_id: str, content: str, model_config: ModelConfig):
+        if not chat_id:
+            raise HTTPException(status_code=400, detail="chat_id is required")
+
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
         if not chat:
-            raise HTTPException(status_code=404, detail="Chat not found")
+            raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
 
-        # Get relevant docs for RAG
-        files = await self.db.query(FileModel).all()
-        relevant_chunks = await self.rag.query(
-            content,
-            [f.vector_store_id for f in files]
-        )
+        async with self.db.begin() as transaction:
+            try:
+                chat = await self.db.query(ChatModel).with_for_update().get(chat_id)
 
-        # Prepare messages with system context from RAG
-        context = "\n\n".join([chunk.extra_info + "\n" + chunk.text for chunk in relevant_chunks])
-        messages = [
-            {"role": "system", "content": f"{model_config.system_message or ''}\n\nContext:\n{context}"},
-            *[{"role": m["role"], "content": m["content"]} for m in chat.messages],
-            {"role": "user", "content": content}
-        ]
+                if not chat:
+                    raise HTTPException(status_code=404, detail="Chat not found")
 
-        # Get LLM provider and generate response
-        provider = await self.llm.get_provider(model_config)
-        response = ""
-        async for chunk in provider.generate(messages, model_config):
-            response += chunk
-            yield chunk
+                # Get relevant docs for RAG
+                files = await self.db.query(FileModel).all()
+                relevant_chunks = await self.rag.query(
+                    content,
+                    [f.vector_store_id for f in files]
+                )
 
-        # Update chat history
-        chat.messages.append({
-            "role": "user",
-            "content": content,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-        chat.messages.append({
-            "role": "assistant",
-            "content": response,
-            "timestamp": datetime.utcnow().isoformat()
-        })
-        await self.db.commit()
+                # Prepare messages with system context from RAG
+                context = "\n\n".join([chunk.extra_info + "\n" + chunk.text for chunk in relevant_chunks])
+                messages = [
+                    {"role": "system", "content": f"{model_config.system_message or ''}\n\nContext:\n{context}"},
+                    *[{"role": m["role"], "content": m["content"]} for m in chat.messages],
+                    {"role": "user", "content": content}
+                ]
+
+                # Get LLM provider and generate response
+                provider = await self.llm.get_provider(model_config)
+                response = ""
+                async for chunk in provider.generate(messages, model_config):
+                    response += chunk
+                    yield chunk
+
+                # Update chat history
+                chat.messages.append({
+                    "role": "user",
+                    "content": content,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                chat.messages.append({
+                    "role": "assistant",
+                    "content": response,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+                await transaction.commit()
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))

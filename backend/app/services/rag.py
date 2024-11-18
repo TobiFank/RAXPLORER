@@ -1,16 +1,20 @@
 # app/services/rag.py
-from llama_index import (
+from llama_index.core import (
     VectorStoreIndex,
     StorageContext,
     load_index_from_storage,
 )
-from llama_index.indices.postprocessor import SentenceTransformerRerank
-from llama_index.node_parser import SentenceSplitter
-from llama_index.vector_stores import QdrantVectorStore
+from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 
 from .llm import LLMService
+from ..db.session import Settings
 from ..schemas.model import ModelConfig
+import logging
+
+logger = logging.getLogger(__name__)
 
 CONTEXT_PROMPT = """
 <document>
@@ -28,27 +32,33 @@ Please give a short succinct context to situate this chunk within the overall do
 
 class RAGService:
     def __init__(self, llm_service: LLMService):
-        self.qdrant = QdrantClient("localhost", port=6333)
-        self.vector_store = QdrantVectorStore(client=self.qdrant)
+        self.settings = Settings()
+        self.qdrant = QdrantClient(host=self.settings.QDRANT_HOST, port=self.settings.QDRANT_PORT)
+        self.vector_store = QdrantVectorStore(client=self.qdrant, collection_name="default")
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
         self.reranker = SentenceTransformerRerank(top_n=20, model="cross-encoder/ms-marco-MiniLM-L-6-v2")
         self.llm_service = llm_service
 
-    async def query(self, query: str, file_ids: list[str]) -> str:
-        indices = [
-            load_index_from_storage(
-                storage_context=self.storage_context,
-                collection_name=file_id
-            ) for file_id in file_ids
-        ]
+    async def query(self, query: str, file_ids: list[str]) -> list:
+        all_nodes = []
 
-        retriever = indices[0].as_retriever(
-            similarity_top_k=150
-        )
-        nodes = retriever.retrieve(query)
-        reranked_nodes = self.reranker.postprocess_nodes(nodes)
+        for file_id in file_ids:
+            try:
+                index = load_index_from_storage(
+                    storage_context=self.storage_context,
+                    collection_name=file_id
+                )
+                nodes = index.as_retriever(similarity_top_k=50).retrieve(query)
+                all_nodes.extend(nodes)
+            except Exception as e:
+                logger.error(f"Failed to query index {file_id}: {e}")
+                continue
 
-        return reranked_nodes[:20]
+        if not all_nodes:
+            return []
+
+        reranked = self.reranker.postprocess_nodes(all_nodes)
+        return reranked[:20]
 
     async def _generate_context(self, chunk_text: str, full_document: str, model_config: ModelConfig) -> str:
         provider = await self.llm_service.get_provider(model_config)

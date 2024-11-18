@@ -6,7 +6,23 @@ authors = ["TobiFank <tobias7402@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.10,<3.13"
+fastapi = "^0.115.5"
+uvicorn = "^0.32.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.36"}
+asyncpg = "^0.30.0"
+pydantic = "^2.9.2"
+pydantic-settings = "^2.6.1"
+python-multipart = "^0.0.17"
+httpx = "^0.27.2"
+sse-starlette = "^2.1.3"
+qdrant-client = "^1.12.1"
+llama-index = "^0.12.0"
+sentence-transformers = "^3.3.1"
+anthropic = "^0.39.0"
+openai = "^1.54.4"
+python-dotenv = "^1.0.1"
+llama-index-vector-stores-qdrant = "^0.4.0"
 
 
 [build-system]

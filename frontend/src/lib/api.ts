@@ -2,11 +2,7 @@
 
 import axios from 'axios';
 
-import type {
-    Chat,
-    FileMetadata,
-    ModelConfig
-} from './types';
+import type {Chat, FileMetadata, ModelConfig} from './types';
 
 // API Configuration
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -152,7 +148,7 @@ export const fileApi = {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await api.post('/files/upload', formData, {
+        const response = await api.post('/files', formData, {  // Changed from '/files/upload'
             headers: {
                 'Content-Type': 'multipart/form-data',
             },

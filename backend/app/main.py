@@ -1,15 +1,16 @@
 # app/main.py
-from fastapi import FastAPI, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 from contextlib import asynccontextmanager
+
+from fastapi import Depends, HTTPException, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api import chat, files, models
 from .core.config import Settings
-from .db.session import get_db
+from .dependencies import get_chat_service, get_storage_service
 from .services.llm import LLMService
 from .services.rag import RAGService
-from .services.chat import ChatService
-from .services.storage import StorageService
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,16 +24,35 @@ async def lifespan(app: FastAPI):
     app.state.llm_service = llm_service
     app.state.rag_service = rag_service
 
+    # Setup database
+    from .db.init_db import init_db
+    await init_db()
+
     yield
+
 
 app = FastAPI(lifespan=lifespan)
 
-# Dependencies
-async def get_chat_service(db: AsyncSession = Depends(get_db)) -> ChatService:
-    return ChatService(db, app.state.llm_service, app.state.rag_service)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Add your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-async def get_storage_service(db: AsyncSession = Depends(get_db)) -> StorageService:
-    return StorageService(db, app.state.rag_service)
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "message": str(exc.detail),
+            "issues": [str(exc.detail)] if isinstance(exc.detail, str) else exc.detail.get("issues", []),
+            "code": exc.status_code
+        }
+    )
+
 
 # Include routers
 app.include_router(chat.router, prefix="/api/v1", dependencies=[Depends(get_chat_service)])

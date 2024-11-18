@@ -29,17 +29,39 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
 };
 
 const ACTIVE_PROVIDER_KEY = 'activeProvider';
+const CONFIG_STORAGE_KEY = 'modelConfig';
+const INITIAL_PROVIDER = 'ollama';
 
 export function useModelConfig() {
-    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(defaultConfigs);
-    const [activeProvider, setActiveProvider] = useState<Provider>('claude');
-
-    useEffect(() => {
-        const saved = window.localStorage.getItem(ACTIVE_PROVIDER_KEY);
-        if (saved) {
-            setActiveProvider(JSON.parse(saved) as Provider);
+    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    return parsed.configs || defaultConfigs;
+                } catch (e) {
+                    console.error('Failed to parse stored config:', e);
+                }
+            }
         }
-    }, []);
+        return defaultConfigs;
+    });
+
+    const [activeProvider, setActiveProvider] = useState<Provider>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    return parsed.activeProvider || INITIAL_PROVIDER;
+                } catch (e) {
+                    console.error('Failed to parse stored config:', e);
+                }
+            }
+        }
+        return INITIAL_PROVIDER;
+    });
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<ModelConfigError | null>(null);
@@ -116,9 +138,16 @@ export function useModelConfig() {
 
             await modelApi.saveConfig(config);
 
-            setConfigs(prev => ({
-                ...prev,
+            const newConfigs = {
+                ...configs,
                 [config.provider]: config
+            };
+            setConfigs(newConfigs);
+
+            // Persist to localStorage
+            window.localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify({
+                configs: newConfigs,
+                activeProvider
             }));
 
             return true;
