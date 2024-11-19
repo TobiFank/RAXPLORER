@@ -1,12 +1,12 @@
 # app/services/llm.py
+import json
 from typing import Protocol, AsyncGenerator
 
 import httpx
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db.models import ModelConfigModel
+from ..core.config import Settings
 from ..schemas.model import ModelConfig, Provider
 
 
@@ -49,19 +49,25 @@ class ChatGPTProvider:
 
 class OllamaProvider:
     async def generate(self, messages: list[dict], config: ModelConfig) -> AsyncGenerator[str, None]:
+        settings = Settings()  # Get settings when needed
+        base_url = settings.OLLAMA_HOST or "http://ollama:11434"
+
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                "http://localhost:11434/api/generate",
+                f"{base_url}/api/generate",
                 json={
                     "model": config.model,
                     "messages": messages,
-                    "stream": True
                 },
-                stream=True
+                timeout=None
             )
             async for line in response.aiter_lines():
-                if "response" in line:
-                    yield line["response"]
+                try:
+                    data = json.loads(line)
+                    if "response" in data:
+                        yield data["response"]
+                except json.JSONDecodeError:
+                    continue
 
 
 class LLMService:

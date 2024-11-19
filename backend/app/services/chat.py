@@ -86,46 +86,42 @@ class ChatService:
         if not chat:
             raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
 
-        async with self.db.begin() as transaction:
-            try:
-                chat = await self.db.query(ChatModel).with_for_update().get(chat_id)
+        try:
+            # Remove the redundant chat query and start directly with files query
+            result = await self.db.execute(select(FileModel))
+            files = result.scalars().all()
+            relevant_chunks = await self.rag.query(
+                content,
+                [f.vector_store_id for f in files]
+            )
 
-                if not chat:
-                    raise HTTPException(status_code=404, detail="Chat not found")
+            # Prepare messages with system context from RAG
+            context = "\n\n".join([chunk.extra_info + "\n" + chunk.text for chunk in relevant_chunks])
+            messages = [
+                {"role": "system", "content": f"{model_config.systemMessage or ''}\n\nContext:\n{context}"},
+                *[{"role": m["role"], "content": m["content"]} for m in chat.messages],
+                {"role": "user", "content": content}
+            ]
 
-                # Get relevant docs for RAG
-                files = await self.db.query(FileModel).all()
-                relevant_chunks = await self.rag.query(
-                    content,
-                    [f.vector_store_id for f in files]
-                )
+            # Get LLM provider and generate response
+            provider = await self.llm.get_provider(model_config)
+            response = ""
+            async for chunk in provider.generate(messages, model_config):
+                response += chunk
+                yield chunk
 
-                # Prepare messages with system context from RAG
-                context = "\n\n".join([chunk.extra_info + "\n" + chunk.text for chunk in relevant_chunks])
-                messages = [
-                    {"role": "system", "content": f"{model_config.system_message or ''}\n\nContext:\n{context}"},
-                    *[{"role": m["role"], "content": m["content"]} for m in chat.messages],
-                    {"role": "user", "content": content}
-                ]
-
-                # Get LLM provider and generate response
-                provider = await self.llm.get_provider(model_config)
-                response = ""
-                async for chunk in provider.generate(messages, model_config):
-                    response += chunk
-                    yield chunk
-
-                # Update chat history
-                chat.messages.append({
-                    "role": "user",
-                    "content": content,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-                chat.messages.append({
-                    "role": "assistant",
-                    "content": response,
-                    "timestamp": datetime.utcnow().isoformat()
-                })
-                await transaction.commit()
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+            # Update chat history
+            chat.messages.append({
+                "role": "user",
+                "content": content,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            chat.messages.append({
+                "role": "assistant",
+                "content": response,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+            await self.db.commit()
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail=str(e))

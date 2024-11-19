@@ -15,5 +15,8 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
 
+    # Ollama
+    OLLAMA_HOST: str = "http://ollama:11434"
+
     class Config:
         env_file = ".env"
