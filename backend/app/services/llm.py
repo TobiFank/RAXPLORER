@@ -4,7 +4,9 @@ from typing import Protocol, AsyncGenerator
 import httpx
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..db.models import ModelConfigModel
 from ..schemas.model import ModelConfig, Provider
 
 
@@ -81,13 +83,3 @@ class LLMService:
             return {"valid": True}
         except Exception as e:
             return {"valid": False, "issues": [str(e)]}
-
-    @classmethod
-    async def save_config(cls, config: ModelConfig):
-        # For now just validate
-        return await cls.validate_config(config)
-
-    @classmethod
-    async def get_configs(cls) -> list[ModelConfig]:
-        # Return empty list for now since we don't have persistence
-        return []

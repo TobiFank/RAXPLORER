@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .db.session import get_db
 from .services.chat import ChatService
+from .services.model_config import ModelConfigService
 from .services.storage import StorageService
 
 
@@ -22,3 +23,8 @@ async def get_storage_service(
 ) -> StorageService:
     from .main import app  # Import here to avoid circular import
     return StorageService(db, app.state.rag_service)
+
+async def get_model_config_service(
+        db: AsyncSession = Depends(get_db)
+) -> ModelConfigService:
+    return ModelConfigService(db)

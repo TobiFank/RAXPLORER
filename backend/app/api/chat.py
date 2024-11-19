@@ -54,3 +54,9 @@ async def send_message(
             request.modelConfig
         )
     )
+
+@router.post("/chats")
+async def create_chat(
+        chat_service: ChatService = Depends(get_chat_service)
+) -> Chat:
+    return await chat_service.create_chat()
