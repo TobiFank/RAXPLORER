@@ -96,19 +96,22 @@ class ChatService:
             )
 
             # Prepare messages with system context from RAG
-            context = "\n\n".join([chunk.extra_info + "\n" + chunk.text for chunk in relevant_chunks])
+            context = "\n\n".join([chunk.text for chunk in relevant_chunks])
             messages = [
                 {"role": "system", "content": f"{model_config.systemMessage or ''}\n\nContext:\n{context}"},
-                *[{"role": m["role"], "content": m["content"]} for m in chat.messages],
                 {"role": "user", "content": content}
             ]
 
             # Get LLM provider and generate response
             provider = await self.llm.get_provider(model_config)
             response = ""
+            print("Starting to stream response")  # Add this logging
             async for chunk in provider.generate(messages, model_config):
+                print("Received chunk:", chunk)  # Add this logging
                 response += chunk
                 yield chunk
+
+            print("Final response:", response)  # Add this logging
 
             # Update chat history
             chat.messages.append({

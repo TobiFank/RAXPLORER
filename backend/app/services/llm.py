@@ -49,25 +49,54 @@ class ChatGPTProvider:
 
 class OllamaProvider:
     async def generate(self, messages: list[dict], config: ModelConfig) -> AsyncGenerator[str, None]:
-        settings = Settings()  # Get settings when needed
+        settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
+
+        print("Ollama request payload:", {
+            "model": config.model,
+            "messages": messages
+        })
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{base_url}/api/generate",
                 json={
                     "model": config.model,
-                    "messages": messages,
+                    "prompt": messages[-1]["content"],  # Get the last user message
+                    "system": messages[0]["content"] if messages[0]["role"] == "system" else "",
+                    "stream": True
                 },
                 timeout=None
             )
+            print("Ollama raw response status:", response.status_code)
+
+            # Keep track if we've seen actual content
+            has_yielded_content = False
+
             async for line in response.aiter_lines():
                 try:
+                    print("Ollama response line:", line)
                     data = json.loads(line)
-                    if "response" in data:
+
+                    # Skip loading messages
+                    if data.get("done_reason") == "load":
+                        continue
+
+                    if "response" in data and data["response"]:
+                        has_yielded_content = True
+                        print("Yielding response:", data["response"])
                         yield data["response"]
+
                 except json.JSONDecodeError:
+                    print("Failed to decode JSON line:", line)
                     continue
+
+            # If we never yielded any content, try again
+            if not has_yielded_content:
+                print("No content yielded, retrying request...")
+                # The model should be loaded now, so retry once
+                async for chunk in self.generate(messages, config):
+                    yield chunk
 
 
 class LLMService:
