@@ -50,7 +50,8 @@ class StorageService:
                     name=file.filename,
                     size=f"{len(content) / 1024:.1f}KB",
                     pages=pages,
-                    vector_store_id=str(uuid4())
+                    vector_store_id=str(uuid4()),
+                    embedding_provider=model_config.provider
                 )
 
                 # Process through RAG

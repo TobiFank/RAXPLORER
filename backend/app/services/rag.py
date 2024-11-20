@@ -6,19 +6,22 @@ from fastapi import HTTPException
 from llama_index.core import (
     VectorStoreIndex,
     StorageContext,
-    load_index_from_storage, Document,
+    load_index_from_storage, Document, QueryBundle,
 )
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.legacy.embeddings import VoyageEmbedding
-from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .llm import LLMService
+from ..db.models import FileModel
 from ..db.session import Settings
-from ..schemas.model import ModelConfig
+from ..schemas.model import ModelConfig, Provider
 
 logger = logging.getLogger(__name__)
 
@@ -70,25 +73,45 @@ class RAGService:
 
         self._model_initialized = True
 
-    async def query(self, query: str, file_ids: list[str]) -> list:
+    async def query(self, query: str, file_ids: list[str], model_config: ModelConfig, db: AsyncSession) -> list:
         all_nodes = []
 
-        for file_id in file_ids:
+        # Get file records to know which embedding model to use
+        result = await db.execute(
+            select(FileModel).filter(FileModel.vector_store_id.in_(file_ids))
+        )
+        files = result.scalars().all()
+
+        for file in files:
             try:
+                # Set embedding model based on stored provider
+                if file.embedding_provider == Provider.CLAUDE:
+                    embed_model = VoyageEmbedding(api_key=model_config.apiKey)
+                elif file.embedding_provider == Provider.CHATGPT:
+                    embed_model = OpenAIEmbedding(api_key=model_config.apiKey)
+                else:  # ollama
+                    embed_model = OllamaEmbedding(
+                        model_name=self.settings.OLLAMA_EMBEDDING_MODEL,
+                        base_url=self.settings.OLLAMA_HOST
+                    )
+
                 index = load_index_from_storage(
                     storage_context=self.storage_context,
-                    collection_name=file_id
+                    collection_name=file.vector_store_id,
+                    embed_model=embed_model
                 )
                 nodes = index.as_retriever(similarity_top_k=50).retrieve(query)
                 all_nodes.extend(nodes)
             except Exception as e:
-                logger.error(f"Failed to query index {file_id}: {e}")
+                logger.error(f"Failed to query index {file.vector_store_id}: {e}")
                 continue
 
         if not all_nodes:
             return []
 
-        reranked = self.reranker.postprocess_nodes(all_nodes)
+        # Create query bundle and pass it to reranker
+        query_bundle = QueryBundle(query_str=query)
+        reranked = self.reranker.postprocess_nodes(all_nodes, query_bundle)
         return reranked[:20]
 
     async def _generate_context(self, chunk_text: str, full_document: str, model_config: ModelConfig) -> str:

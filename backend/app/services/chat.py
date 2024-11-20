@@ -102,7 +102,9 @@ class ChatService:
             files = result.scalars().all()
             relevant_chunks = await self.rag.query(
                 content,
-                [f.vector_store_id for f in files]
+                [f.vector_store_id for f in files],
+                model_config,
+                self.db
             )
             context = "\n\n".join([chunk.text for chunk in relevant_chunks])
 

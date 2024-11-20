@@ -22,6 +22,7 @@ class FileModel(Base):
     pages = Column(Integer, nullable=False)
     vector_store_id = Column(String, nullable=False)
     uploaded_at = Column(DateTime, server_default=func.now())
+    embedding_provider = Column(String, nullable=False)
 
 class ModelConfigModel(Base):
     __tablename__ = "model_configs"
