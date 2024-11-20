@@ -1,4 +1,6 @@
 # app/services/rag.py
+import logging
+
 import httpx
 from fastapi import HTTPException
 from llama_index.core import (
@@ -6,15 +8,17 @@ from llama_index.core import (
     StorageContext,
     load_index_from_storage, Document,
 )
-from llama_index.core.postprocessor import SentenceTransformerRerank
 from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.postprocessor import SentenceTransformerRerank
+from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.legacy.embeddings import VoyageEmbedding
+from llama_index.embeddings.ollama import OllamaEmbedding
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 
 from .llm import LLMService
 from ..db.session import Settings
 from ..schemas.model import ModelConfig
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +42,7 @@ class RAGService:
         self.qdrant = QdrantClient(host=self.settings.QDRANT_HOST, port=self.settings.QDRANT_PORT)
         self.vector_store = QdrantVectorStore(client=self.qdrant, collection_name="default")
         self.storage_context = StorageContext.from_defaults(vector_store=self.vector_store)
-        self.reranker = SentenceTransformerRerank(top_n=20, model="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        self.reranker = SentenceTransformerRerank(top_n=20, model=self.settings.RERANKING_MODEL)
         self.llm_service = llm_service
         self._model_initialized = False
 
@@ -99,26 +103,38 @@ class RAGService:
             context += text
         return context.strip()
 
+    async def set_embedding_model(self, model_config: ModelConfig):
+        if model_config.provider == "claude":
+            Settings.embed_model = VoyageEmbedding(api_key=model_config.apiKey)
+        elif model_config.provider == "chatgpt":
+            Settings.embed_model = OpenAIEmbedding(api_key=model_config.apiKey)
+        else:  # ollama
+            Settings.embed_model = OllamaEmbedding(model_name=self.settings.OLLAMA_EMBEDDING_MODEL,
+                                                   base_url=self.settings.OLLAMA_HOST)
+
     async def process_document(self, file_content: bytes, file_id: str, model_config: ModelConfig):
         try:
+            logger.info(f"Processing document {file_id} with model config: {model_config}")
             await self.ensure_model_available(model_config)
+            await self.set_embedding_model(model_config)
 
             text_content = file_content.decode()
             doc = Document(text=text_content, id_=file_id)
             nodes = SentenceSplitter(chunk_overlap=20).get_nodes_from_documents([doc])
 
-            provider = await self.llm_service.get_provider(model_config)
-
             for node in nodes:
-                # Generate context with chat model
-                node.extra_info = await self._generate_context(node.text, text_content, model_config)
-                # Get embeddings with embedding model
+                node.metadata["context"] = await self._generate_context(node.text, text_content, model_config)
+
+            # Then get embeddings
+            provider = await self.llm_service.get_provider(model_config)
+            for node in nodes:
                 node.embedding = await provider.get_embeddings(node.text, model_config)
 
-            index = VectorStoreIndex.from_documents(
+            index = VectorStoreIndex(
                 nodes,
                 storage_context=self.storage_context,
-                collection_name=file_id
+                collection_name=file_id,
+                embed_model=Settings.embed_model
             )
             return index
 

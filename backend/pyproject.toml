@@ -24,6 +24,7 @@ openai = "^1.54.4"
 python-dotenv = "^1.0.1"
 llama-index-vector-stores-qdrant = "^0.4.0"
 pymupdf = "^1.24.14"
+llama-index-embeddings-ollama = "^0.4.0"
 
 
 [build-system]
