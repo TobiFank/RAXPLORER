@@ -144,14 +144,16 @@ export const chatApi = {
 
 // File API
 export const fileApi = {
-    uploadFile: async (file: File): Promise<FileMetadata> => {
+    uploadFile: async (file: File, modelConfig: ModelConfig): Promise<FileMetadata> => {
         const formData = new FormData();
         formData.append('file', file);
+        // Send modelConfig as stringified JSON in the model_config field
+        formData.append('model_config_json', JSON.stringify(modelConfig));
 
-        const response = await api.post('/files', formData, {  // Changed from '/files/upload'
+        const response = await api.post('/files/', formData, {  // Note the trailing slash
             headers: {
                 'Content-Type': 'multipart/form-data',
-            },
+            }
         });
         return response.data;
     },

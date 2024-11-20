@@ -68,7 +68,7 @@ const ChatInterface = () => {
 
         const droppedFiles = Array.from(e.dataTransfer.files);
         for (const file of droppedFiles) {
-            await uploadFile(file);
+            await uploadFile(file, modelConfig);
         }
     };
 
@@ -412,7 +412,7 @@ const ChatInterface = () => {
                                         className="hidden"
                                         onChange={(e) => {
                                             const file = e.target.files?.[0];
-                                            if (file) uploadFile(file);
+                                            if (file) uploadFile(file, modelConfig);
                                         }}
                                         multiple
                                     />

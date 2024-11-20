@@ -1,5 +1,6 @@
 # app/services/llm.py
 import json
+import logging
 from typing import Protocol, AsyncGenerator
 
 import httpx
@@ -10,8 +11,6 @@ from openai import AsyncOpenAI
 from ..core.config import Settings
 from ..schemas.model import ModelConfig, Provider
 
-import logging
-
 logger = logging.getLogger(__name__)
 
 
@@ -20,53 +19,48 @@ class LLMProvider(Protocol):
 
     async def validate_config(self, config: ModelConfig) -> dict: ...
 
+    async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]: ...
+
 
 class ClaudeProvider:
     async def generate(self, messages: list[dict], config: ModelConfig):
         client = AsyncAnthropic(api_key=config.apiKey)
         system = config.systemMessage or ""
-
-        response = await client.messages.stream(
-            model=config.model,
-            messages=messages,
-            system=system,
-            temperature=config.temperature
-        )
-
+        response = await client.messages.stream(model=config.model, messages=messages, system=system, temperature=config.temperature)
         async for chunk in response:
             if chunk.delta.text:
                 yield chunk.delta.text
 
+    async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]:
+        client = AsyncAnthropic(api_key=config.apiKey)
+        response = await client.embeddings.create(
+            model="claude-3-embedding-v1",
+            input=text
+        )
+        return response.embeddings[0]
 
 class ChatGPTProvider:
-    async def generate(self, messages: list[dict], config: ModelConfig) -> AsyncGenerator[str, None]:
-        client = AsyncOpenAI(api_key=config.api_key)
-        response = await client.chat.completions.create(
-            model=config.model,
-            messages=messages,
-            temperature=config.temperature,
-            stream=True
-        )
+    async def generate(self, messages: list[dict], config: ModelConfig):
+        client = AsyncOpenAI(api_key=config.apiKey)
+        response = await client.chat.completions.create(model=config.model, messages=messages, temperature=config.temperature, stream=True)
         async for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
+    async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]:
+        client = AsyncOpenAI(api_key=config.apiKey)
+        response = await client.embeddings.create(
+            model="text-embedding-3-small",
+            input=text
+        )
+        return response.data[0].embedding
 
 class OllamaProvider:
-    async def generate(self, messages: list[dict], config: ModelConfig) -> AsyncGenerator[str, None]:
+    async def generate(self, messages: list[dict], config: ModelConfig):
         settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
-        # Ensure messages are in correct format for Ollama
-        formatted_messages = []
-        for msg in messages:
-            if "role" in msg and "content" in msg:
-                formatted_messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"]
-                })
-
-        logger.info(f"Sending formatted messages to Ollama: {formatted_messages}")
+        logger.info(f"Sending formatted messages to Ollama: {messages}")
 
         async with httpx.AsyncClient() as client:
             try:
@@ -74,7 +68,7 @@ class OllamaProvider:
                     f"{base_url}/api/chat",
                     json={
                         "model": config.model,
-                        "messages": formatted_messages,
+                        "messages": messages,
                         "stream": True
                     },
                     timeout=None
@@ -82,8 +76,7 @@ class OllamaProvider:
 
                 if not response.status_code == 200:
                     logger.error(f"Ollama error: {response.status_code} - {response.text}")
-                    raise HTTPException(status_code=response.status_code,
-                                        detail=f"Ollama error: {response.text}")
+                    raise HTTPException(status_code=response.status_code, detail=f"Ollama error: {response.text}")
 
                 async for line in response.aiter_lines():
                     try:
@@ -97,6 +90,32 @@ class OllamaProvider:
             except Exception as e:
                 logger.error(f"Error communicating with Ollama: {str(e)}")
                 raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]:
+        settings = Settings()
+        base_url = settings.OLLAMA_HOST or "http://ollama:11434"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{base_url}/api/embeddings",
+                    json={
+                        "model": settings.OLLAMA_EMBEDDING_MODEL,
+                        "prompt": text
+                    },
+                    timeout=None
+                )
+
+                if not response.status_code == 200:
+                    logger.error(f"Ollama embeddings error: {response.status_code} - {response.text}")
+                    raise HTTPException(status_code=response.status_code, detail=f"Ollama error: {response.text}")
+
+                data = response.json()
+                return data["embedding"]
+
+        except Exception as e:
+            logger.error(f"Error getting embeddings from Ollama: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 class LLMService:

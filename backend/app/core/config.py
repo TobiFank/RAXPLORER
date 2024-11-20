@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     # Ollama
     OLLAMA_HOST: str = "http://ollama:11434"
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
 
     class Config:
         env_file = ".env"
