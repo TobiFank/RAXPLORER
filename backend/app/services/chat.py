@@ -97,11 +97,14 @@ class ChatService:
             chat.messages = []
 
         try:
-            # Query files for RAG context
+            # Enhance the query first
+            enhanced_query = await self.enhance_query(content, chat.messages, model_config)
+
+            # Query files for RAG context using enhanced query
             result = await self.db.execute(select(FileModel))
             files = result.scalars().all()
             relevant_chunks = await self.rag.query(
-                content,
+                enhanced_query,
                 [f.vector_store_id for f in files],
                 model_config,
                 self.db
@@ -123,7 +126,7 @@ class ChatService:
             } for msg in chat.messages if "role" in msg and "content" in msg])
 
             # Create enhanced user message with context for LLM
-            enhanced_message = f"Given this context:\n{context}\n\nAnswer this User Query: {content}"
+            enhanced_message = f"Given the chat history and this context:\n{context}\n\nAnswer this User Query: {content}"
             messages.append({
                 "role": "user",
                 "content": enhanced_message
@@ -160,3 +163,45 @@ class ChatService:
             logger.error(f"Error in stream_response: {str(e)}")
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def enhance_query(self, query: str, chat_messages: list, model_config: ModelConfig) -> str:
+        """Enhance the user query using chat history and other context to improve RAG results"""
+
+        # Create a prompt that helps the model understand what we want
+        enhancement_prompt = {
+            "role": "system",
+            "content": """You are a query enhancement specialist. Your task is to rephrase and expand the given query to improve search results. Consider:
+    1. Recent chat context to understand the full conversation flow
+    2. Add relevant synonyms or related terms
+    3. Make implicit subjects explicit
+    4. Include contextual information from recent messages
+    5. Break compound questions into their core concepts
+    
+    Keep the enhanced query focused and relevant. Don't add speculative content.
+    Output only the enhanced query, nothing else."""
+        }
+
+        # Get recent chat context (last 3 messages for context)
+        recent_context = chat_messages[-3:] if chat_messages else []
+        context_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent_context])
+
+        user_prompt = {
+            "role": "user",
+            "content": f"""Chat History:
+    {context_str}
+    
+    Original Query: {query}
+    
+    Enhance this query for better search results."""
+        }
+
+        # Get LLM provider and generate enhanced query
+        provider = await self.llm.get_provider(model_config)
+        enhanced_query = ""
+        async for chunk in provider.generate([enhancement_prompt, user_prompt], model_config):
+            enhanced_query += chunk
+
+        logger.info(f"Original query: {query}")
+        logger.info(f"Enhanced query: {enhanced_query}")
+
+        return enhanced_query.strip()
