@@ -4,10 +4,15 @@ from typing import Protocol, AsyncGenerator
 
 import httpx
 from anthropic import AsyncAnthropic
+from fastapi import HTTPException
 from openai import AsyncOpenAI
 
 from ..core.config import Settings
 from ..schemas.model import ModelConfig, Provider
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class LLMProvider(Protocol):
@@ -52,51 +57,46 @@ class OllamaProvider:
         settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
-        print("Ollama request payload:", {
-            "model": config.model,
-            "messages": messages
-        })
+        # Ensure messages are in correct format for Ollama
+        formatted_messages = []
+        for msg in messages:
+            if "role" in msg and "content" in msg:
+                formatted_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"]
+                })
+
+        logger.info(f"Sending formatted messages to Ollama: {formatted_messages}")
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{base_url}/api/generate",
-                json={
-                    "model": config.model,
-                    "prompt": messages[-1]["content"],  # Get the last user message
-                    "system": messages[0]["content"] if messages[0]["role"] == "system" else "",
-                    "stream": True
-                },
-                timeout=None
-            )
-            print("Ollama raw response status:", response.status_code)
+            try:
+                response = await client.post(
+                    f"{base_url}/api/chat",
+                    json={
+                        "model": config.model,
+                        "messages": formatted_messages,
+                        "stream": True
+                    },
+                    timeout=None
+                )
 
-            # Keep track if we've seen actual content
-            has_yielded_content = False
+                if not response.status_code == 200:
+                    logger.error(f"Ollama error: {response.status_code} - {response.text}")
+                    raise HTTPException(status_code=response.status_code,
+                                        detail=f"Ollama error: {response.text}")
 
-            async for line in response.aiter_lines():
-                try:
-                    print("Ollama response line:", line)
-                    data = json.loads(line)
-
-                    # Skip loading messages
-                    if data.get("done_reason") == "load":
+                async for line in response.aiter_lines():
+                    try:
+                        data = json.loads(line)
+                        if "message" in data and data["message"].get("content"):
+                            yield data["message"]["content"]
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to decode Ollama response: {line} - {str(e)}")
                         continue
 
-                    if "response" in data and data["response"]:
-                        has_yielded_content = True
-                        print("Yielding response:", data["response"])
-                        yield data["response"]
-
-                except json.JSONDecodeError:
-                    print("Failed to decode JSON line:", line)
-                    continue
-
-            # If we never yielded any content, try again
-            if not has_yielded_content:
-                print("No content yielded, retrying request...")
-                # The model should be loaded now, so retry once
-                async for chunk in self.generate(messages, config):
-                    yield chunk
+            except Exception as e:
+                logger.error(f"Error communicating with Ollama: {str(e)}")
+                raise HTTPException(status_code=500, detail=str(e))
 
 
 class LLMService:

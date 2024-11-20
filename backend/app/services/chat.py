@@ -2,6 +2,7 @@
 from datetime import datetime
 
 from fastapi import HTTPException
+from sqlalchemy import update
 from sqlalchemy.sql import select
 
 from .llm import LLMService
@@ -10,6 +11,10 @@ from ..db.models import ChatModel, FileModel
 from ..db.session import AsyncSession
 from ..schemas.chat import Chat
 from ..schemas.model import ModelConfig
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
@@ -86,34 +91,51 @@ class ChatService:
         if not chat:
             raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
 
+        logger.info(f"Chat content - id: {chat.id}, title: {chat.title}, messages: {chat.messages}")
+
+        if chat.messages is None:
+            chat.messages = []
+
         try:
-            # Remove the redundant chat query and start directly with files query
+            # Query files for RAG context
             result = await self.db.execute(select(FileModel))
             files = result.scalars().all()
             relevant_chunks = await self.rag.query(
                 content,
                 [f.vector_store_id for f in files]
             )
-
-            # Prepare messages with system context from RAG
             context = "\n\n".join([chunk.text for chunk in relevant_chunks])
-            messages = [
-                {"role": "system", "content": f"{model_config.systemMessage or ''}\n\nContext:\n{context}"},
-                {"role": "user", "content": content}
-            ]
+
+            # Build message history
+            messages = []
+            if model_config.systemMessage:
+                messages.append({
+                    "role": "system",
+                    "content": model_config.systemMessage
+                })
+
+            # Add existing chat history
+            messages.extend([{
+                "role": msg["role"],
+                "content": msg["content"]
+            } for msg in chat.messages if "role" in msg and "content" in msg])
+
+            # Create enhanced user message with context for LLM
+            enhanced_message = f"Given this context:\n{context}\n\nAnswer this User Query: {content}"
+            messages.append({
+                "role": "user",
+                "content": enhanced_message
+            })
+
+            logger.info(f"Messages to send to LLM: {messages}")
 
             # Get LLM provider and generate response
             provider = await self.llm.get_provider(model_config)
             response = ""
-            print("Starting to stream response")  # Add this logging
             async for chunk in provider.generate(messages, model_config):
-                print("Received chunk:", chunk)  # Add this logging
                 response += chunk
                 yield chunk
 
-            print("Final response:", response)  # Add this logging
-
-            # Update chat history
             chat.messages.append({
                 "role": "user",
                 "content": content,
@@ -124,7 +146,15 @@ class ChatService:
                 "content": response,
                 "timestamp": datetime.utcnow().isoformat()
             })
+            # Tell SQLAlchemy the field was modified
+            await self.db.execute(
+                update(ChatModel)
+                .where(ChatModel.id == chat.id)
+                .values(messages=chat.messages)
+            )
             await self.db.commit()
+
         except Exception as e:
+            logger.error(f"Error in stream_response: {str(e)}")
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
