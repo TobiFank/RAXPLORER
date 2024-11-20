@@ -96,7 +96,8 @@ class StorageService:
         ]
 
     async def delete(self, file_id: str):
-        file = await self.db.query(FileModel).get(file_id)
+        result = await self.db.execute(select(FileModel).filter(FileModel.id == file_id))
+        file = result.scalar_one_or_none()
         if file:
             try:
                 # Clean up vector store first
