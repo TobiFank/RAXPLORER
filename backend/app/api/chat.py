@@ -1,7 +1,6 @@
 # app/api/chat.py
 from fastapi import APIRouter, Depends
-from sse_starlette.sse import EventSourceResponse
-
+from fastapi.responses import StreamingResponse
 from ..dependencies import get_chat_service
 from ..schemas.chat import Chat, MessageRequest
 from ..services.chat import ChatService
@@ -46,13 +45,14 @@ async def send_message(
         chat_id: str,
         request: MessageRequest,
         chat_service: ChatService = Depends(get_chat_service)
-) -> EventSourceResponse:
-    return EventSourceResponse(
+) -> StreamingResponse:
+    return StreamingResponse(
         chat_service.stream_response(
             chat_id,
             request.content,
             request.modelConfig
-        )
+        ),
+        media_type='text/plain'
     )
 
 @router.post("/chats")
