@@ -1,7 +1,7 @@
 'use client';
 // src/components/chat-interface.tsx
 
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ChevronDown, FileText, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
@@ -50,6 +50,22 @@ const ChatInterface = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [editingChatId, setEditingChatId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState<string>('');
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        // Focus input when component mounts
+        inputRef.current?.focus();
+    }, []);
 
     // File handling functions
     const handleDragOver = (e: React.DragEvent) => {
@@ -107,9 +123,15 @@ const ChatInterface = () => {
 
         try {
             console.log("Attempting to send message...");
-            await sendMessage(inputText, modelConfig);
+            const currentInput = inputText;
+            setInputText(''); // Clear input before sending
+            await sendMessage(currentInput, modelConfig);
             console.log("Message sent successfully");
-            setInputText('');
+
+            // Use setTimeout to ensure focus happens after state updates
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 0);
         } catch (error) {
             console.error("Error sending message:", error);
         }
@@ -454,7 +476,9 @@ const ChatInterface = () => {
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col">
                 {/* Chat Messages */}
-                <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                <div ref={messagesContainerRef}
+                     className="flex-1 p-6 overflow-y-auto space-y-6"
+                >
                     {Array.isArray(messages) && messages.map((message, index) => (
                         <div
                             key={index}
@@ -498,6 +522,7 @@ const ChatInterface = () => {
                     )}
                     <div className="flex gap-2">
                         <Textarea
+                            ref={inputRef}
                             value={inputText}
                             onChange={(e) => {
                                 console.log("Input changed:", e.target.value);
