@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 import fitz
+from fastapi import HTTPException
 from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -161,7 +162,8 @@ class RAGService:
             return True
 
         except Exception as e:
-            logger.error(f"Document processing failed: {str(e)}")
+            import traceback
+            logger.error(f"Document processing failed: {str(e)}\n{traceback.format_exc()}")
             raise
 
     async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:

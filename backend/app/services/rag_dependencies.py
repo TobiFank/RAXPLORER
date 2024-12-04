@@ -92,6 +92,28 @@ class ChromaProvider(VectorStoreProvider[Document]):
             logger.error(f"ChromaDB query failed: {str(e)}")
             return []
 
+    async def store_embeddings(self, sections: List[DocumentSection], embeddings: List[List[float]]):
+        """Store document sections and their embeddings in ChromaDB"""
+        try:
+            # Extract content and metadata from sections
+            documents = [section.content for section in sections]
+            metadatas = [section.metadata for section in sections]
+            ids = [str(i) for i in range(len(sections))]  # Simple sequential IDs
+
+            # Add to collection
+            self.collection.add(
+                embeddings=embeddings,
+                documents=documents,
+                metadatas=metadatas,
+                ids=ids
+            )
+
+            logger.info(f"Successfully stored {len(sections)} sections in ChromaDB")
+
+        except Exception as e:
+            logger.error(f"Failed to store embeddings in ChromaDB: {str(e)}")
+            raise
+
 
 # Add BM25 implementation for hybrid search
 class BM25Retriever:

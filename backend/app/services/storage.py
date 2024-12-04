@@ -85,7 +85,8 @@ class StorageService:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to upload file {file.filename}: {e}")
+            import traceback
+            logger.error(f"Failed to upload file {file.filename}: {str(e)}\n{traceback.format_exc()}")
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
         finally:
