@@ -1,5 +1,6 @@
 # app/services/rag.py
 import logging
+import os
 import re
 from typing import List, Tuple
 
@@ -77,7 +78,13 @@ Example citation format:
 Answer in this structured format:
 Answer: [Your detailed answer with inline citations]
 Reasoning: [Your step-by-step reasoning process]
-Confidence: [Score between 0-1 based on context relevance]"""
+Confidence: [Score between 0-1 based on context relevance]
+
+If any of the retrieved chunks have associated images that would help explain the concept, 
+include a reference to them in your answer using [Image X] notation. For example:
+- When explaining a diagram: "As we can see in [Image 1], the process flows from..."
+- When an image provides evidence: "The document shows this clearly in [Image 2]"
+Only reference images that are directly relevant to answering the question."""
 
 
 class RAGService:
@@ -126,13 +133,27 @@ class RAGService:
                 for image_index, img in enumerate(page.get_images(full=True)):
                     xref = img[0]
                     base_image = pdf_document.extract_image(xref)
+
+                    # Determine the proper extension
+                    extension = base_image.get('ext', 'png')
+                    image_path = f"storage/images/{file_id}_{page_num}_{image_index}.{extension}"
+
+                    # Ensure the storage directory exists
+                    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+
+                    # Save the image
+                    with open(image_path, "wb") as f:
+                        f.write(base_image["image"])
+
                     image = DocumentImage(
                         image_data=base_image["image"],
                         page_num=page_num,
                         image_type="image",
                         metadata={
                             "page_num": page_num,
-                            "image_index": image_index
+                            "image_index": image_index,
+                            "extension": extension,
+                            "file_path": image_path
                         }
                     )
 
@@ -342,13 +363,15 @@ class RAGService:
                     confidence = 0.7  # Default if parsing fails
 
         # Post-process response and add references
-        processed_text, references_text = self._process_citations(answer, citations)
+        processed_text, references_text, referenced_image_ids = self._process_citations(answer, citations)
         final_answer = processed_text + references_text
+
+        referenced_images = [img for img in images if img.image_id in referenced_image_ids]
 
         return RAGResponse(
             answer=final_answer,
             citations=citations,  # Original citations with file paths for frontend
-            images=list(images),
+            images=referenced_images,
             reasoning=reasoning,
             confidence_score=confidence
         )
@@ -372,7 +395,8 @@ class RAGService:
                             document_name=chunk.metadata['document_id'],
                             page_number=img['page_num'],
                             image_type=img['image_type'],
-                            caption=img.get('caption')
+                            caption=img.get('caption'),
+                            file_path=img.get('file_path')
                         ))
         return images
 
@@ -477,7 +501,7 @@ class RAGService:
 
         return citations
 
-    def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str]:
+    def _process_citation_numbers(self, response: str, citations: List[Citation]) -> Tuple[str, str]:
         """
         Process response to replace citations with numbers and create reference list
         Returns: (processed_text, references_text)
@@ -515,3 +539,19 @@ class RAGService:
         references_text = "\n\nReferences:\n" + "\n\n".join(references)
 
         return processed_text, references_text
+
+    def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str, List[str]]:
+        """
+        Process response to replace citations and track used images
+        Returns: (processed_text, references_text, referenced_image_ids)
+        """
+        processed_text, references_text = self._process_citation_numbers(response, citations)
+
+        # Track which images were referenced
+        referenced_image_ids = []
+        image_pattern = r'\[Image ([^\]]+)\]'
+        for match in re.finditer(image_pattern, processed_text):
+            image_id = match.group(1)
+            referenced_image_ids.append(image_id)
+
+        return processed_text, references_text, referenced_image_ids

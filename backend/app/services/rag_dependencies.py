@@ -1,4 +1,5 @@
 # app/services/rag_dependencies.py
+import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -70,20 +71,22 @@ class ChromaProvider(VectorStoreProvider[Document]):
         try:
             # Extract content and metadata from sections
             documents = [section.content for section in sections]
-            metadatas = [section.metadata for section in sections]
+            metadatas = [section.metadata.copy() for section in sections]  # Make a copy to avoid modifying original
 
             # Important: Store images in metadata if they exist
             for idx, section in enumerate(sections):
                 if section.images:
-                    metadatas[idx]['images'] = [
+                    metadatas[idx]['images'] = json.dumps([
                         {
                             'page_num': img.page_num,
                             'image_index': img.metadata.get('image_index'),
                             'image_type': img.image_type,
-                            'caption': img.metadata.get('caption')
+                            'caption': img.metadata.get('caption'),
+                            'extension': img.metadata.get('extension', 'png'),
+                            'file_path': img.metadata.get('file_path')
                         }
                         for img in section.images
-                    ]
+                    ])
 
             ids = [str(i) for i in range(len(sections))]
 
@@ -123,6 +126,24 @@ class ChromaProvider(VectorStoreProvider[Document]):
                     logger.warning(f"Document missing page_num in metadata: {content[:100]}")
                     continue
 
+                # Process images if they exist
+                processed_images = []
+                if 'images' in metadata:
+                    try:
+                        images_data = json.loads(metadata['images'])
+                        processed_images = [
+                            {
+                                'page_num': img['page_num'],
+                                'image_index': img['image_index'],
+                                'image_type': img['image_type'],
+                                'caption': img.get('caption'),
+                                'file_path': f"storage/images/{metadata['document_id']}_{img['page_num']}_{img['image_index']}.{img.get('extension', 'png')}"
+                            }
+                            for img in images_data
+                        ]
+                    except json.JSONDecodeError:
+                        logger.warning(f"Failed to decode images metadata: {metadata['images']}")
+
                 # Create Document with proper metadata structure
                 doc = Document(
                     page_content=content,
@@ -130,7 +151,8 @@ class ChromaProvider(VectorStoreProvider[Document]):
                         'document_id': metadata['document_id'],
                         'page_num': metadata['page_num'],
                         'section_type': metadata.get('section_type', 'text'),
-                        'images': metadata.get('images', [])
+                        'images': processed_images,
+                        'file_path': metadata.get('file_path')
                     }
                 )
                 documents.append(doc)

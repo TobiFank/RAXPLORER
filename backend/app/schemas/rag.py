@@ -18,6 +18,7 @@ class ImageReference(BaseModel):
     page_number: int
     image_type: str  # 'image', 'table', 'diagram'
     caption: Optional[str] = None
+    file_path: Optional[str] = None
 
 class RAGResponse(BaseModel):
     answer: str
