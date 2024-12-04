@@ -105,6 +105,7 @@ class RAGService:
         """Process a document and store its embeddings and metadata"""
         try:
             # Open PDF with PyMuPDF
+            logger.info(f"Processing document {file_id}")
             pdf_document = fitz.open(stream=file_content, filetype="pdf")
             sections: List[DocumentSection] = []
 

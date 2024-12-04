@@ -112,7 +112,7 @@ class BM25Retriever:
         """Query BM25 index and return top_k documents with scores"""
         if not self.bm25:
             return []
-        
+
         tokenized_query = query.split()
         scores = self.bm25.get_scores(tokenized_query)
         top_n = np.argsort(scores)[-top_k:][::-1]

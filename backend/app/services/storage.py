@@ -1,12 +1,11 @@
 # app/services/storage.py
 import logging
 import os
-from http.client import HTTPException
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
 import pymupdf
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 from sqlalchemy import select
 
 from .rag import RAGService
@@ -27,15 +26,27 @@ class StorageService:
 
     async def upload(self, file: UploadFile, model_config: ModelConfig) -> FileMetadata:
         try:
+            logger.info(f"Uploading file {file.filename}")
             # Create a temporary file to handle the upload
+            content = await file.read()
+            logger.info(f"File size: {len(content) / 1024:.1f}KB")
             with NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                content = await file.read()
+                logger.info(f"Temporary file: {tmp_file.name}")
                 tmp_file.write(content)
                 tmp_file.flush()
 
-                # Now open with PyMuPDF
-                pdf = pymupdf.open(tmp_file.name)
-                pages = len(pdf)
+                with open(tmp_file.name, 'rb') as f:
+                    first_bytes = f.read(4)
+                    logger.info(f"First bytes of file: {first_bytes.hex()}")
+
+                try:
+                    # Now open with PyMuPDF
+                    pdf = pymupdf.open(tmp_file.name)
+                    pages = len(pdf)
+                    logger.info(f"successfully opened PDF with {pages} pages")
+                except Exception as e:
+                    logger.error(f"Failed to open PDF file: {e}")
+                    raise HTTPException(status_code=500, detail="Failed to open PDF file")
 
                 # Extract text for RAG
                 text_content = ""
@@ -56,7 +67,7 @@ class StorageService:
 
                 # Process through RAG
                 await self.rag.process_document(
-                    text_content.encode('utf-8'),  # Send text content instead of PDF
+                    content,
                     file_model.vector_store_id,
                     model_config
                 )
