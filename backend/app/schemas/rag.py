@@ -10,6 +10,7 @@ class Citation(BaseModel):
     text: str
     quote_start: str  # First few words of the quote
     quote_end: str    # Last few words of the quote
+    file_path: str | None = None
 
 class ImageReference(BaseModel):
     image_id: str

@@ -1,6 +1,7 @@
 # app/services/rag.py
 import logging
-from typing import List
+import re
+from typing import List, Tuple
 
 import fitz
 from langchain.prompts import PromptTemplate
@@ -340,9 +341,13 @@ class RAGService:
                 except ValueError:
                     confidence = 0.7  # Default if parsing fails
 
+        # Post-process response and add references
+        processed_text, references_text = self._process_citations(answer, citations)
+        final_answer = processed_text + references_text
+
         return RAGResponse(
-            answer=answer,
-            citations=citations,
+            answer=final_answer,
+            citations=citations,  # Original citations with file paths for frontend
             images=list(images),
             reasoning=reasoning,
             confidence_score=confidence
@@ -447,7 +452,8 @@ class RAGService:
                     page_number=page_num,
                     text=text,
                     quote_start=quote_start,
-                    quote_end=quote_end
+                    quote_end=quote_end,
+                    file_path=chunk.metadata.get('file_path')
                 ))
 
         # If no explicit citations found, try to match content
@@ -464,8 +470,48 @@ class RAGService:
                             page_number=chunk.metadata['page_num'],
                             text=chunk.page_content,
                             quote_start=sentence[:50],
-                            quote_end=sentence[-50:] if len(sentence) > 50 else sentence
+                            quote_end=sentence[-50:] if len(sentence) > 50 else sentence,
+                            file_path=chunk.metadata.get('file_path')
                         ))
                         break  # One citation per chunk is enough
 
         return citations
+
+    def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str]:
+        """
+        Process response to replace citations with numbers and create reference list
+        Returns: (processed_text, references_text)
+        """
+        # Create citation mapping and counter
+        citation_map = {}  # (doc_id, page) -> citation_number
+        counter = {'current': 1}  # Using dict to modify in nested function
+
+        # Build regex for finding citations
+        pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
+
+        def replace_citation(match):
+            doc_id = match.group(1)
+            page = int(match.group(2))
+            key = (doc_id, page)
+            if key not in citation_map:
+                citation_map[key] = counter['current']
+                counter['current'] += 1
+            return f'[{citation_map[key]}]'
+
+        # Replace citations in text with numbers
+        processed_text = re.sub(pattern, replace_citation, response)
+
+        # Create reference list
+        references = []
+        for (doc_id, page), number in sorted(citation_map.items(), key=lambda x: x[1]):
+            citation = next((c for c in citations if c.document_name == doc_id and c.page_number == page), None)
+            if citation:
+                ref = f"[{number}] {citation.document_name}, Page {citation.page_number}"
+                # Add quote snippet if available
+                if citation.quote_start and citation.quote_end:
+                    ref += f"\nQuote: '{citation.quote_start}...{citation.quote_end}'"
+                references.append(ref)
+
+        references_text = "\n\nReferences:\n" + "\n\n".join(references)
+
+        return processed_text, references_text
