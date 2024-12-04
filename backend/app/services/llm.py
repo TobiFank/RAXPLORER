@@ -26,10 +26,17 @@ class ClaudeProvider:
     async def generate(self, messages: list[dict], config: ModelConfig):
         client = AsyncAnthropic(api_key=config.apiKey)
         system = config.systemMessage or ""
-        response = await client.messages.stream(model=config.model, messages=messages, system=system, temperature=config.temperature)
-        async for chunk in response:
-            if chunk.delta.text:
-                yield chunk.delta.text
+        message_stream = await client.messages.create(
+            model=config.model,
+            messages=messages,
+            system=system,
+            temperature=config.temperature,
+            max_tokens=4096,
+            stream=True
+        )
+        async for chunk in message_stream:
+            if hasattr(chunk, 'content'):
+                yield chunk.content[0].text
 
     async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]:
         client = AsyncAnthropic(api_key=config.apiKey)

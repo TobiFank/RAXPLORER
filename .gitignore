@@ -7,3 +7,4 @@ volumes/
 *.sqlite3
 /backend/storage/
 *.bin
+/docs/
