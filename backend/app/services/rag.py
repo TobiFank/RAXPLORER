@@ -2,23 +2,25 @@
 import logging
 import os
 import re
+from pathlib import Path
 from typing import List, Tuple
 
 import fitz
+from fastapi import HTTPException
 from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from .llm import LLMService
 from .rag_dependencies import (
     ChromaProvider, BM25Retriever, DocumentSection,
     DocumentImage
 )
+from ..core.config import Settings
 from ..db.models import FileModel
-from ..schemas.model import ModelConfig
+from ..schemas.model import ModelConfig, Provider
 from ..schemas.rag import RAGResponse, ImageReference, Citation
 
 logger = logging.getLogger(__name__)
@@ -92,8 +94,9 @@ Only reference images that are directly relevant to answering the question."""
 class RAGService:
     def __init__(self, llm_service: LLMService):
         self.llm_service = llm_service
-        self.chroma_provider = ChromaProvider("default")
+        self.chroma_provider = ChromaProvider()
         self.bm25_retriever = BM25Retriever()
+        self.settings = Settings()
 
         # Initialize text splitter for hierarchical chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -116,7 +119,7 @@ class RAGService:
         )
 
     async def process_document(self, file_content: bytes, file_model: FileModel, model_config: ModelConfig):
-        """Process a document and store its embeddings and metadata"""
+        """Process a document and store embeddings for all providers"""
         try:
             # Get original filename from database
             file_id = file_model.vector_store_id
@@ -181,14 +184,77 @@ class RAGService:
                     )
                     sections.append(section)
 
-            # Create embeddings
-            texts = [section.content for section in sections]
-            embeddings = await self._get_embeddings(texts, model_config)
+            valid_providers = []
+            for provider in Provider:
+                try:
+                    provider_config = ModelConfig(
+                        provider=provider,
+                        model=model_config.model,
+                        temperature=model_config.temperature,
+                        systemMessage=model_config.systemMessage,
+                        apiKey=model_config.apiKey  # This could be None or empty
+                    )
 
-            # Store in ChromaDB - sections already contain metadata
-            await self.chroma_provider.store_embeddings(sections, embeddings)
+                    # Check if provider has required API key
+                    if (provider in [Provider.CLAUDE, Provider.CHATGPT] and not provider_config.apiKey) or \
+                            (provider == Provider.OLLAMA and not self.settings.OLLAMA_HOST):
+                        logger.info(f"Skipping provider {provider} - no API key/host configured")
+                        continue
 
-            # Create Document objects for BM25
+                    valid_providers.append(provider)
+                except Exception as e:
+                    logger.error(f"Error validating provider {provider}: {str(e)}")
+                    continue
+
+            if not valid_providers:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No valid providers found. Please configure at least one provider with valid credentials."
+                )
+
+            # Process with each provider
+            for provider in valid_providers:
+                try:
+                    logger.info(f"Processing with provider: {provider}")
+
+                    # Create provider-specific config
+                    provider_config = ModelConfig(
+                        provider=provider,
+                        model=model_config.model,
+                        temperature=model_config.temperature,
+                        systemMessage=model_config.systemMessage,
+                        apiKey=model_config.apiKey
+                    )
+
+                    # Get provider service for embeddings
+                    provider_service = await self.llm_service.get_provider(provider_config)
+
+                    # Generate embeddings for each section using provider's embedding model
+                    texts = [section.content for section in sections]
+                    embeddings = []
+                    for text in texts:
+                        try:
+                            embedding = await provider_service.get_embeddings(text, provider_config)
+                            embeddings.append(embedding)
+                        except Exception as e:
+                            logger.error(f"Failed to generate embedding for text with provider {provider}: {str(e)}")
+                            raise
+
+                    # Store in provider-specific collection
+                    await self.chroma_provider.store_embeddings(
+                        provider=provider,
+                        sections=sections,
+                        embeddings=embeddings
+                    )
+
+                    logger.info(f"Successfully processed document with provider {provider}")
+
+                except Exception as e:
+                    logger.error(f"Failed to process with provider {provider}: {str(e)}")
+                    # Continue with other providers even if one fails
+                    continue
+
+            # Create Document objects for BM25 (provider-independent)
             documents = [
                 Document(
                     page_content=section.content,
@@ -197,15 +263,28 @@ class RAGService:
                 for section in sections
             ]
 
-            # Update BM25 index with Documents
+            # Update BM25 index
             self.bm25_retriever.fit(documents)
+
+            # Cleanup
+            pdf_document.close()
 
             return True
 
         except Exception as e:
             import traceback
             logger.error(f"Document processing failed: {str(e)}\n{traceback.format_exc()}")
-            raise
+            # Clean up any partially processed files
+            try:
+                # Cleanup logic for failed processing
+                image_dir = Path("storage/images")
+                if image_dir.exists():
+                    for image_file in image_dir.glob(f"{file_id}_*"):
+                        image_file.unlink(missing_ok=True)
+            except Exception as cleanup_error:
+                logger.error(f"Cleanup after failure failed: {str(cleanup_error)}")
+
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:
         """Execute a RAG query and generate an answer"""
@@ -294,12 +373,18 @@ class RAGService:
         return embeddings
 
     async def _dense_search(self, query: str, model_config: ModelConfig) -> List[Document]:
-        query_embedding = await self._get_embeddings([query], model_config)
+        """Execute dense search using selected provider"""
+        provider = await self.llm_service.get_provider(model_config)
+        query_embedding = await provider.get_embeddings(query, model_config)
         try:
-            return await self.chroma_provider.query(query_embedding[0])
+            return await self.chroma_provider.query(
+                provider=model_config.provider,
+                query_embedding=query_embedding,
+                top_k=5
+            )
         except Exception as e:
             logger.error(f"Dense search failed: {e}")
-            return []  # Fallback to empty result but continue with sparse search
+            return []
 
     def _sparse_search(self, query: str) -> List[Document]:
         """Execute sparse (BM25) search"""
