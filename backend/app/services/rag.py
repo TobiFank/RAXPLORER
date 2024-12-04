@@ -32,15 +32,19 @@ class QueryAnalysis(BaseModel):
     sub_questions: List[SubQuestion] = Field(description="List of sub-questions to answer")
 
 
-QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-questions if needed.
+QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-questions.
 Main Query: {query}
 
-Think about:
-1. What is the main intent of the query?
-2. What sub-questions need to be answered to fully address the query?
-3. Are there implied questions that aren't directly stated?
+Please respond with a JSON object that contains:
+1. A "main_intent" field with a string describing the core purpose of the query
+2. A "sub_questions" array containing objects with "question" and "reasoning" fields
 
-{format_instructions}"""
+Example response format:
+{{"main_intent": "understand what the user means by X", "sub_questions": [{{"question": "what is X?", "reasoning": "need to clarify the basic concept"}}]}}
+
+Remember: Respond ONLY with the JSON object, no other text or schema information.
+
+Question to analyze: {query}"""
 
 STEP_BACK_PROMPT = """Before directly answering the query, let's take a step back and think about the broader context.
 Query: {query}
