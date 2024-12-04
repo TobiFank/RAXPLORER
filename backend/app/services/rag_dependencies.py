@@ -152,7 +152,8 @@ class ChromaProvider(VectorStoreProvider[Document]):
                         'page_num': metadata['page_num'],
                         'section_type': metadata.get('section_type', 'text'),
                         'images': processed_images,
-                        'file_path': metadata.get('file_path')
+                        'file_path': metadata.get('file_path'),
+                        'name': metadata.get('name')
                     }
                 )
                 documents.append(doc)

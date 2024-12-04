@@ -120,10 +120,6 @@ class RAGService:
         try:
             # Get original filename from database
             file_id = file_model.vector_store_id
-            result = await self.db.execute(
-                select(FileModel).filter(FileModel.vector_store_id == file_id)
-            )
-            file = result.scalar_one_or_none()
             original_filename = file_model.name
 
             # Open PDF with PyMuPDF
@@ -179,8 +175,8 @@ class RAGService:
                             "page_num": page_num,
                             "document_id": file_id,
                             "section_type": "text",
-                            "original_filename": original_filename,
-                            "file_path": file.file_path if file else None
+                            "name": original_filename,
+                            "file_path": file_model.file_path
                         }
                     )
                     sections.append(section)
@@ -214,6 +210,26 @@ class RAGService:
     async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:
         """Execute a RAG query and generate an answer"""
         try:
+
+            # If no documents, fall back to direct LLM response
+            if not file_ids:
+                provider = await self.llm_service.get_provider(model_config)
+
+                prompt = f"Please provide a response to this query: {query}\n\nNote: Respond directly, mentioning that you don't have any specific documents or context to refer to, but use your model knowledge instead."
+
+                messages = [{"role": "user", "content": prompt}]
+                response = ""
+                async for chunk in provider.generate(messages, model_config):
+                    response += chunk
+
+                return RAGResponse(
+                    answer=response,
+                    citations=[],
+                    images=[],
+                    reasoning="Direct response without document context",
+                    confidence_score=0.7  # Lower confidence since no source documents
+                )
+
             # 1. Get retrieved chunks using our existing methods
             query_analysis = await self._analyze_query(query, model_config)
             broader_query = await self._generate_step_back_query(query, model_config)
@@ -479,8 +495,9 @@ class RAGService:
                 quote_start = sentences[0] if sentences else ""
                 quote_end = sentences[-1] if sentences else ""
 
+                logger.info(f"Chunk metadata: {chunk.metadata}")
                 citations.append(Citation(
-                    document_name=chunk.metadata.get('original_filename', doc_id),
+                    document_name=chunk.metadata['name'],
                     page_number=page_num,
                     text=text,
                     quote_start=quote_start,
@@ -491,14 +508,16 @@ class RAGService:
         # If no explicit citations found, try to match content
         if not citations:
             for chunk in chunks:
+                logger.info(f"Checking chunk {chunk}")
                 # Look for significant portions of the chunk content in the response
                 # Split into sentences and look for matches
                 chunk_sentences = chunk.page_content.split('.')
                 for sentence in chunk_sentences:
                     sentence = sentence.strip()
                     if len(sentence) > 20 and sentence in response:  # Only match substantial sentences
+                        logger.info(f"Chunk metadata: {chunk.metadata}")
                         citations.append(Citation(
-                            document_name=chunk.metadata.get('original_filename', chunk.metadata['document_id']),
+                            document_name=chunk.metadata['name'],
                             page_number=chunk.metadata['page_num'],
                             text=chunk.page_content,
                             quote_start=sentence[:50],
