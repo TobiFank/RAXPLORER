@@ -140,36 +140,66 @@ class RAGService:
                 raw_sections = self.text_splitter.split_text(text)
 
                 # Extract images and tables
-                for image_index, img in enumerate(page.get_images(full=True)):
-                    xref = img[0]
-                    base_image = pdf_document.extract_image(xref)
+                try:
+                    logger.info(f"Found {len(page.get_images())} images on page {page_num}")
+                    logger.info(f"Image list: {page.get_images()}")
 
-                    # Determine the proper extension
-                    extension = base_image.get('ext', 'png')
-                    image_path = f"storage/images/{file_id}_{page_num}_{image_index}.{extension}"
+                    for img_index, img_info in enumerate(page.get_images()):
+                        try:
+                            # Get raw image data
+                            # img_info structure: (xref, smask, width, height, bpc, colorspace, ...)
+                            xref = img_info[0]  # xref number
+                            width = img_info[2]  # width
+                            height = img_info[3]  # height
 
-                    # Ensure the storage directory exists
-                    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+                            # Get image data directly from the PDF
+                            pix = fitz.Pixmap(pdf_document, xref)
 
-                    # Save the image
-                    with open(image_path, "wb") as f:
-                        f.write(base_image["image"])
+                            # Convert to RGB if necessary
+                            if pix.n - pix.alpha > 3:
+                                pix = fitz.Pixmap(fitz.csRGB, pix)
 
-                    image = DocumentImage(
-                        image_data=base_image["image"],
-                        page_num=page_num,
-                        image_type="image",
-                        metadata={
-                            "page_num": page_num,
-                            "image_index": image_index,
-                            "extension": extension,
-                            "file_path": image_path
-                        }
-                    )
+                            # Create image path
+                            image_filename = f"{file_id}_{page_num}_{img_index}.png"
+                            image_path = f"storage/images/{image_filename}"
 
-                    # Find closest section to link image
-                    if sections:
-                        sections[-1].images.append(image)
+                            # Ensure directory exists
+                            os.makedirs(os.path.dirname(image_path), exist_ok=True)
+
+                            # Save as PNG
+                            pix.save(image_path)
+                            logger.info(f"Saved image to {image_path}")
+
+                            # Create DocumentImage
+                            image = DocumentImage(
+                                image_data=pix.samples,
+                                page_num=page_num,
+                                image_type="image",
+                                metadata={
+                                    "page_num": page_num,
+                                    "image_index": img_index,
+                                    "extension": "png",
+                                    "file_path": image_path,
+                                    "width": pix.width,
+                                    "height": pix.height,
+                                    "has_alpha": pix.alpha > 0
+                                }
+                            )
+
+                            # Add to the most recent section
+                            if sections:
+                                sections[-1].images.append(image)
+                                logger.info(f"Added image {image_path} to section")
+
+                            # Clean up
+                            pix = None
+
+                        except Exception as e:
+                            logger.error(f"Failed to extract image {img_index} from page {page_num}: {str(e)}, info: {img_info}")
+                            continue
+
+                except Exception as e:
+                    logger.error(f"Failed to process images on page {page_num}: {str(e)}")
 
                 # Create sections with metadata
                 for section_text in raw_sections:
