@@ -5,11 +5,11 @@ from fastapi import Depends, HTTPException, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api import chat, files, models
-from core.config import Settings
-from dependencies import get_chat_service, get_storage_service
-from services.llm import LLMService
-from services.rag import RAGService
+from .api import chat, files, models
+from .core.config import Settings
+from .services.llm import LLMService
+from .dependencies import get_chat_service, get_storage_service
+from .services.rag import RAGService
 
 
 @asynccontextmanager

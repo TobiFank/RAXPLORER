@@ -4,3 +4,4 @@ volumes/
 *.xml
 .idea/
 
+*.sqlite3

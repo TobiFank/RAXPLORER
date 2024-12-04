@@ -58,10 +58,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
 
     def __init__(self, collection_name: str):
         super().__init__(collection_name)
-        self.client = chromadb.Client(ChromaSettings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory=str(Path("./chromadb"))
-        ))
+        self.client = chromadb.PersistentClient(path="./chromadb")
         # Initialize embeddings model
         self.embedding_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
