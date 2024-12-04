@@ -34,7 +34,7 @@ services:
       - ollama
     volumes:
       - ./backend:/app
-      - chromadb_data:/app/chromadb
+      - chromadb_data:/backend/chromadb
     networks:
       - app-network
 

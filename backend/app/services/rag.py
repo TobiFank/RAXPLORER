@@ -396,6 +396,8 @@ class RAGService:
 
         referenced_images = [img for img in images if img.image_id in referenced_image_ids]
 
+        logger.info(f"Final answer: {final_answer}")
+
         return RAGResponse(
             answer=final_answer,
             citations=citations,  # Original citations with file paths for frontend
@@ -526,6 +528,7 @@ class RAGService:
                         ))
                         break  # One citation per chunk is enough
 
+        logger.info(f"Found citations: {citations}")
         return citations
 
     def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str, List[str]]:
@@ -574,5 +577,7 @@ class RAGService:
         for match in re.finditer(image_pattern, processed_text):
             image_id = match.group(1)
             referenced_image_ids.append(image_id)
+
+        logger.info(f"Built references text: {references_text}")
 
         return processed_text, references_text, referenced_image_ids

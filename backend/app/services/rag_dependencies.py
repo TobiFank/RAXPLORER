@@ -73,6 +73,12 @@ class ChromaProvider(VectorStoreProvider[Document]):
             documents = [section.content for section in sections]
             metadatas = [section.metadata.copy() for section in sections]  # Make a copy to avoid modifying original
 
+            for metadata in metadatas:
+                logger.info(f"Storing document with metadata: {metadata}")
+                if not metadata.get('name'):
+                    logger.warning(f"Missing name in metadata for document {metadata.get('document_id')}")
+
+
             # Important: Store images in metadata if they exist
             for idx, section in enumerate(sections):
                 if section.images:
