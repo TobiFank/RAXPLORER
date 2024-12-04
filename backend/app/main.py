@@ -1,9 +1,11 @@
 # app/main.py
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, HTTPException, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
 from .api import chat, files, models
 from .core.config import Settings
@@ -53,6 +55,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         }
     )
 
+storage_path = Path("storage")
+storage_path.mkdir(exist_ok=True)
+app.mount("/storage", StaticFiles(directory=storage_path), name="storage")
 
 # Include routers
 app.include_router(chat.router, prefix="/api/v1", dependencies=[Depends(get_chat_service)])

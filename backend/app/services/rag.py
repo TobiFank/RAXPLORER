@@ -669,7 +669,9 @@ class RAGService:
                 # Use the friendly name for display
                 ref_text = f"[{number}] {citation.document_name}, Page {page}"
                 if citation.file_path:
-                    ref_text += f" [View Document]({citation.file_path})"
+                    api_url = "http://localhost:8000"  # Or get from settings if you prefer
+                    web_path = f"{api_url}/storage/documents/{os.path.basename(citation.file_path)}"
+                    ref_text += f" [View Document]({web_path}#page={page})"
                 #if citation.quote_start and citation.quote_end:
                 #    ref_text += f"\nQuote: \"{citation.quote_start}...{citation.quote_end}\""
                 references.append(ref_text)

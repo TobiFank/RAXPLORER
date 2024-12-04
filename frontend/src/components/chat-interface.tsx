@@ -155,6 +155,42 @@ const ChatInterface = () => {
         }
     };
 
+    const MessageContent = ({ content }: { content: string }) => {
+        // Split the content into parts based on the references section
+        const [mainContent, references] = content.split('References:', 2);
+
+        if (!references) {
+            return <div className="whitespace-pre-wrap">{content}</div>;
+        }
+
+        return (
+            <>
+                <div className="whitespace-pre-wrap">{mainContent}</div>
+                <div className="mt-4">
+                    <strong>References:</strong>
+                    <div className="whitespace-pre-wrap">
+                        {references.split('\n').map((ref, i) => {
+                            const match = ref.match(/\[View Document\]\((.*?)\)/);
+                            if (match) {
+                                const url = match[1];
+                                return (
+                                    <div key={i}>
+                                        {ref.replace(/\[View Document\]\(.*?\)/, '')}
+                                        <a href={url} target="_blank" rel="noopener noreferrer"
+                                           className="text-blue-500 hover:text-blue-700">
+                                            [View Document]
+                                        </a>
+                                    </div>
+                                );
+                            }
+                            return <div key={i}>{ref}</div>;
+                        })}
+                    </div>
+                </div>
+            </>
+        );
+    };
+
     return (
         <div className="flex h-screen bg-gray-50">
             {/* Sidebar */}
@@ -490,7 +526,7 @@ const ChatInterface = () => {
                                         : 'bg-gray-100 text-gray-900'
                                 }`}
                             >
-                                <div className="whitespace-pre-wrap">{message.content}</div>
+                                <MessageContent content={message.content} />
                                 <div className={`text-xs mt-2 ${
                                     message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                                 }`}>
