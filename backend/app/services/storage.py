@@ -120,10 +120,21 @@ class StorageService:
                     Path(file.file_path).unlink(missing_ok=True)
 
                 # Clean up vector store
-                try:
-                    await self.rag.chroma_provider.delete_collection(file.vector_store_id)
-                except Exception as e:
-                    logger.error(f"Failed to delete vector store {file.vector_store_id}: {e}")
+                if file.vector_store_id:
+                    try:
+                        await self.rag.chroma_provider.delete_collection(file.vector_store_id)
+                    except Exception as e:
+                        # If vector store deletion fails, we should probably fail the whole operation
+                        logger.error(f"Failed to delete vector store {file.vector_store_id}: {e}")
+                        raise HTTPException(
+                            status_code=500,
+                            detail=f"Failed to clean up document data: {str(e)}"
+                        )
+
+                image_dir = Path("storage/images")
+                if image_dir.exists():
+                    for image_file in image_dir.glob(f"{file_id}_*"):
+                        image_file.unlink(missing_ok=True)
 
                 # Remove database record
                 await self.db.delete(file)

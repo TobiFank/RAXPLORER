@@ -291,9 +291,12 @@ class RAGService:
         return embeddings
 
     async def _dense_search(self, query: str, model_config: ModelConfig) -> List[Document]:
-        """Execute dense retrieval search"""
         query_embedding = await self._get_embeddings([query], model_config)
-        return await self.chroma_provider.query(query_embedding[0])
+        try:
+            return await self.chroma_provider.query(query_embedding[0])
+        except Exception as e:
+            logger.error(f"Dense search failed: {e}")
+            return []  # Fallback to empty result but continue with sparse search
 
     def _sparse_search(self, query: str) -> List[Document]:
         """Execute sparse (BM25) search"""
