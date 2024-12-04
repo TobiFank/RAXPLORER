@@ -3,7 +3,6 @@ import logging
 from typing import List
 
 import fitz
-from fastapi import HTTPException
 from langchain.prompts import PromptTemplate
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -148,16 +147,24 @@ class RAGService:
                     )
                     sections.append(section)
 
-            # Create embeddings and store in ChromaDB
+            # Create embeddings
             texts = [section.content for section in sections]
-            metadatas = [section.metadata for section in sections]
             embeddings = await self._get_embeddings(texts, model_config)
 
-            # Store in ChromaDB
+            # Store in ChromaDB - sections already contain metadata
             await self.chroma_provider.store_embeddings(sections, embeddings)
 
-            # Update BM25 index
-            self.bm25_retriever.fit(texts)
+            # Create Document objects for BM25
+            documents = [
+                Document(
+                    page_content=section.content,
+                    metadata=section.metadata
+                )
+                for section in sections
+            ]
+
+            # Update BM25 index with Documents
+            self.bm25_retriever.fit(documents)
 
             return True
 
@@ -234,14 +241,15 @@ class RAGService:
         query_embedding = await self._get_embeddings([query], model_config)
         return await self.chroma_provider.query(query_embedding[0])
 
-    def _sparse_search(self, query: str) -> List[tuple[str, float]]:
+    def _sparse_search(self, query: str) -> List[Document]:
         """Execute sparse (BM25) search"""
-        return self.bm25_retriever.query(query)
+        results = self.bm25_retriever.query(query)
+        return [doc for doc, _ in results]  # Return just the Documents
 
     def _reciprocal_rank_fusion(
             self,
             dense_results: List[Document],
-            sparse_results: List[tuple[str, float]],
+            sparse_results: List[Document],  # Updated type
             k: int = 60
     ) -> List[Document]:
         """Combine dense and sparse results using RRF"""
@@ -250,20 +258,22 @@ class RAGService:
 
         # Score dense results
         for rank, doc in enumerate(dense_results):
-            doc_scores[doc.page_content] = 1 / (k + rank + 1)
+            key = (doc.page_content, doc.metadata.get('document_id', ''), doc.metadata.get('page_num', 0))
+            doc_scores[key] = {'doc': doc, 'score': 1 / (k + rank + 1)}
 
         # Score sparse results
-        for rank, (text, _) in enumerate(sparse_results):
-            if text in doc_scores:
-                doc_scores[text] += 1 / (k + rank + 1)
+        for rank, doc in enumerate(sparse_results):
+            key = (doc.page_content, doc.metadata.get('document_id', ''), doc.metadata.get('page_num', 0))
+            if key in doc_scores:
+                doc_scores[key]['score'] += 1 / (k + rank + 1)
             else:
-                doc_scores[text] = 1 / (k + rank + 1)
+                doc_scores[key] = {'doc': doc, 'score': 1 / (k + rank + 1)}
 
         # Sort by final scores
-        sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)
+        sorted_docs = sorted(doc_scores.values(), key=lambda x: x['score'], reverse=True)
 
-        # Convert back to Documents
-        return [doc for doc, _ in sorted_docs]
+        # Return Documents
+        return [item['doc'] for item in sorted_docs]
 
     def _deduplicate_results(self, results: List[Document]) -> List[Document]:
         """Remove duplicate results while preserving order"""

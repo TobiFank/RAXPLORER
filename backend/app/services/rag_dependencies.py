@@ -57,40 +57,13 @@ class VectorStoreProvider(Generic[T]):
 
 
 class ChromaProvider(VectorStoreProvider[Document]):
-    """ChromaDB implementation of vector store"""
-
     def __init__(self, collection_name: str):
         super().__init__(collection_name)
         self.client = chromadb.PersistentClient(path="./chromadb")
-        # Initialize embeddings model
         self.embedding_model = HuggingFaceEmbeddings(
             model_name="sentence-transformers/all-MiniLM-L6-v2"
         )
-        # Initialize or get collection
         self.collection = self.client.get_or_create_collection(name=collection_name)
-
-    async def query(self, query_embedding: List[float], top_k: int = 5) -> List[Document]:
-        """Execute a query against the ChromaDB collection"""
-        try:
-            results = self.collection.query(
-                query_embeddings=[query_embedding],
-                n_results=top_k
-            )
-
-            # Convert results to Documents
-            documents = []
-            for idx, content in enumerate(results['documents'][0]):  # First list since we only send one query
-                metadata = results['metadatas'][0][idx] if results.get('metadatas') else {}
-                documents.append(Document(
-                    page_content=content,
-                    metadata=metadata
-                ))
-
-            return documents
-
-        except Exception as e:
-            logger.error(f"ChromaDB query failed: {str(e)}")
-            return []
 
     async def store_embeddings(self, sections: List[DocumentSection], embeddings: List[List[float]]):
         """Store document sections and their embeddings in ChromaDB"""
@@ -98,7 +71,21 @@ class ChromaProvider(VectorStoreProvider[Document]):
             # Extract content and metadata from sections
             documents = [section.content for section in sections]
             metadatas = [section.metadata for section in sections]
-            ids = [str(i) for i in range(len(sections))]  # Simple sequential IDs
+
+            # Important: Store images in metadata if they exist
+            for idx, section in enumerate(sections):
+                if section.images:
+                    metadatas[idx]['images'] = [
+                        {
+                            'page_num': img.page_num,
+                            'image_index': img.metadata.get('image_index'),
+                            'image_type': img.image_type,
+                            'caption': img.metadata.get('caption')
+                        }
+                        for img in section.images
+                    ]
+
+            ids = [str(i) for i in range(len(sections))]
 
             # Add to collection
             self.collection.add(
@@ -114,23 +101,65 @@ class ChromaProvider(VectorStoreProvider[Document]):
             logger.error(f"Failed to store embeddings in ChromaDB: {str(e)}")
             raise
 
+    async def query(self, query_embedding: List[float], top_k: int = 5) -> List[Document]:
+        """Execute a query against the ChromaDB collection"""
+        try:
+            results = self.collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k
+            )
+
+            # Convert results to Documents with proper metadata
+            documents = []
+            for idx, content in enumerate(results['documents'][0]):  # First list since we only send one query
+                metadata = results['metadatas'][0][idx] if results.get('metadatas') else {}
+
+                # Ensure required metadata fields exist
+                if 'document_id' not in metadata:
+                    logger.warning(f"Document missing document_id in metadata: {content[:100]}")
+                    continue
+
+                if 'page_num' not in metadata:
+                    logger.warning(f"Document missing page_num in metadata: {content[:100]}")
+                    continue
+
+                # Create Document with proper metadata structure
+                doc = Document(
+                    page_content=content,
+                    metadata={
+                        'document_id': metadata['document_id'],
+                        'page_num': metadata['page_num'],
+                        'section_type': metadata.get('section_type', 'text'),
+                        'images': metadata.get('images', [])
+                    }
+                )
+                documents.append(doc)
+
+            return documents
+
+        except Exception as e:
+            logger.error(f"ChromaDB query failed: {str(e)}")
+            return []
+
 
 # Add BM25 implementation for hybrid search
 class BM25Retriever:
     def __init__(self):
         self.bm25 = None
-        self.documents = []
+        self.documents: List[Document] = []  # Change to store Document objects
+        self._texts: List[str] = []  # Add private texts list for BM25
 
-    def fit(self, documents: List[str]):
+    def fit(self, documents: List[Document]):  # Change parameter to List[Document]
         """Fit BM25 on a list of documents"""
         if not documents:
             return
 
-        tokenized_docs = [doc.split() for doc in documents]
-        self.bm25 = BM25Okapi(tokenized_docs)
         self.documents = documents
+        self._texts = [doc.page_content for doc in documents]
+        tokenized_docs = [text.split() for text in self._texts]
+        self.bm25 = BM25Okapi(tokenized_docs)
 
-    def query(self, query: str, top_k: int = 5) -> List[tuple[str, float]]:
+    def query(self, query: str, top_k: int = 5) -> List[tuple[Document, float]]:  # Update return type
         """Query BM25 index and return top_k documents with scores"""
         if not self.bm25:
             return []
