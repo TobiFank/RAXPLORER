@@ -70,7 +70,7 @@ class StorageService:
             # Process through RAG
             await self.rag.process_document(
                 content,
-                file_model.vector_store_id,
+                file_model,
                 model_config
             )
 

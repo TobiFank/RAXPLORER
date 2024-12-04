@@ -10,12 +10,14 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from .llm import LLMService
 from .rag_dependencies import (
     ChromaProvider, BM25Retriever, DocumentSection,
     DocumentImage
 )
+from ..db.models import FileModel
 from ..schemas.model import ModelConfig
 from ..schemas.rag import RAGResponse, ImageReference, Citation
 
@@ -113,11 +115,19 @@ class RAGService:
             input_variables=["query"]
         )
 
-    async def process_document(self, file_content: bytes, file_id: str, model_config: ModelConfig):
+    async def process_document(self, file_content: bytes, file_model: FileModel, model_config: ModelConfig):
         """Process a document and store its embeddings and metadata"""
         try:
+            # Get original filename from database
+            file_id = file_model.vector_store_id
+            result = await self.db.execute(
+                select(FileModel).filter(FileModel.vector_store_id == file_id)
+            )
+            file = result.scalar_one_or_none()
+            original_filename = file_model.name
+
             # Open PDF with PyMuPDF
-            logger.info(f"Processing document {file_id}")
+            logger.info(f"Processing document {file_model.name}")
             pdf_document = fitz.open(stream=file_content, filetype="pdf")
             sections: List[DocumentSection] = []
 
@@ -168,7 +178,9 @@ class RAGService:
                         metadata={
                             "page_num": page_num,
                             "document_id": file_id,
-                            "section_type": "text"
+                            "section_type": "text",
+                            "original_filename": original_filename,
+                            "file_path": file.file_path if file else None
                         }
                     )
                     sections.append(section)
@@ -439,11 +451,7 @@ class RAGService:
             for img in images
         )
 
-    def _extract_citations(
-            self,
-            response: str,
-            chunks: List[Document]
-    ) -> List[Citation]:
+    def _extract_citations(self, response: str, chunks: List[Document]) -> List[Citation]:
         """Extract and validate citations from the response"""
         citations = []
 
@@ -465,14 +473,14 @@ class RAGService:
 
             if doc_id in chunk_map:
                 chunk = chunk_map[doc_id]
-                # Get a snippet of the relevant text
+                # Get meaningful sentences for quotes
                 text = chunk.page_content
-                words = text.split()
-                quote_start = " ".join(words[:10])  # First 10 words
-                quote_end = " ".join(words[-10:])   # Last 10 words
+                sentences = [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+                quote_start = sentences[0] if sentences else ""
+                quote_end = sentences[-1] if sentences else ""
 
                 citations.append(Citation(
-                    document_name=doc_id,
+                    document_name=chunk.metadata.get('original_filename', doc_id),
                     page_number=page_num,
                     text=text,
                     quote_start=quote_start,
@@ -490,7 +498,7 @@ class RAGService:
                     sentence = sentence.strip()
                     if len(sentence) > 20 and sentence in response:  # Only match substantial sentences
                         citations.append(Citation(
-                            document_name=chunk.metadata['document_id'],
+                            document_name=chunk.metadata.get('original_filename', chunk.metadata['document_id']),
                             page_number=chunk.metadata['page_num'],
                             text=chunk.page_content,
                             quote_start=sentence[:50],
@@ -501,53 +509,47 @@ class RAGService:
 
         return citations
 
-    def _process_citation_numbers(self, response: str, citations: List[Citation]) -> Tuple[str, str]:
-        """
-        Process response to replace citations with numbers and create reference list
-        Returns: (processed_text, references_text)
-        """
-        # Create citation mapping and counter
-        citation_map = {}  # (doc_id, page) -> citation_number
-        counter = {'current': 1}  # Using dict to modify in nested function
-
-        # Build regex for finding citations
-        pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
-
-        def replace_citation(match):
-            doc_id = match.group(1)
-            page = int(match.group(2))
-            key = (doc_id, page)
-            if key not in citation_map:
-                citation_map[key] = counter['current']
-                counter['current'] += 1
-            return f'[{citation_map[key]}]'
-
-        # Replace citations in text with numbers
-        processed_text = re.sub(pattern, replace_citation, response)
-
-        # Create reference list
-        references = []
-        for (doc_id, page), number in sorted(citation_map.items(), key=lambda x: x[1]):
-            citation = next((c for c in citations if c.document_name == doc_id and c.page_number == page), None)
-            if citation:
-                ref = f"[{number}] {citation.document_name}, Page {citation.page_number}"
-                # Add quote snippet if available
-                if citation.quote_start and citation.quote_end:
-                    ref += f"\nQuote: '{citation.quote_start}...{citation.quote_end}'"
-                references.append(ref)
-
-        references_text = "\n\nReferences:\n" + "\n\n".join(references)
-
-        return processed_text, references_text
-
     def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str, List[str]]:
         """
         Process response to replace citations and track used images
         Returns: (processed_text, references_text, referenced_image_ids)
         """
-        processed_text, references_text = self._process_citation_numbers(response, citations)
+        # First pass: Replace citations with numerical references
+        processed_text = response
+        citation_map = {}  # (doc_name, page) -> number
+        current_citation = 1
 
-        # Track which images were referenced
+        # Find all citation patterns and replace with numbers
+        citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
+        matches = list(re.finditer(citation_pattern, response))
+
+        for match in matches:
+            doc_name = match.group(1)
+            page = int(match.group(2))
+            key = (doc_name, page)
+
+            if key not in citation_map:
+                citation_map[key] = current_citation
+                current_citation += 1
+
+            processed_text = processed_text.replace(match.group(0), f'[{citation_map[key]}]')
+
+        # Build references section
+        references = []
+        for (doc_name, page), number in sorted(citation_map.items(), key=lambda x: x[1]):
+            citation = next((c for c in citations if c.document_name == doc_name and c.page_number == page), None)
+            if citation:
+                # Include file path for clickable reference
+                ref_text = f"[{number}] {citation.document_name}, Page {page}"
+                if citation.file_path:
+                    ref_text += f" [View Document]({citation.file_path})"
+                if citation.quote_start and citation.quote_end:
+                    ref_text += f"\nQuote: \"{citation.quote_start}...{citation.quote_end}\""
+                references.append(ref_text)
+
+        references_text = "\n\nReferences:\n" + "\n\n".join(references) if references else ""
+
+        # Track referenced images
         referenced_image_ids = []
         image_pattern = r'\[Image ([^\]]+)\]'
         for match in re.finditer(image_pattern, processed_text):
