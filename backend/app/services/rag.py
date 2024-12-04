@@ -670,8 +670,8 @@ class RAGService:
                 ref_text = f"[{number}] {citation.document_name}, Page {page}"
                 if citation.file_path:
                     ref_text += f" [View Document]({citation.file_path})"
-                if citation.quote_start and citation.quote_end:
-                    ref_text += f"\nQuote: \"{citation.quote_start}...{citation.quote_end}\""
+                #if citation.quote_start and citation.quote_end:
+                #    ref_text += f"\nQuote: \"{citation.quote_start}...{citation.quote_end}\""
                 references.append(ref_text)
 
         references_text = "\n\nReferences:\n" + "\n\n".join(references) if references else ""
