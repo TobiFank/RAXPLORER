@@ -232,7 +232,10 @@ class RAGService:
 
             # 1. Get retrieved chunks using our existing methods
             query_analysis = await self._analyze_query(query, model_config)
+            logger.info(f"Query analysis: {query_analysis}")
+
             broader_query = await self._generate_step_back_query(query, model_config)
+            logger.info(f"Step-back query: {broader_query}")
 
             # Execute all queries in parallel
             queries = [query, broader_query] + [sq.question for sq in query_analysis.sub_questions]
@@ -376,6 +379,7 @@ class RAGService:
 
         # Parse the response and extract citations
         citations = self._extract_citations(response, merged_chunks)
+        logger.info(f"Extracted citations: {citations}")
 
         # Create structured response
         parts = response.split("Reasoning:", 1)
