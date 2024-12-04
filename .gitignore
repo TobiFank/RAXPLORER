@@ -5,3 +5,4 @@ volumes/
 .idea/
 
 *.sqlite3
+/backend/storage/

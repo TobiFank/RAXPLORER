@@ -1,6 +1,7 @@
 # app/services/storage.py
 import logging
 import os
+from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
@@ -24,75 +25,77 @@ class StorageService:
         self.rag = rag_service
         self.settings = Settings()
 
+    def _ensure_storage_path(self):
+        """Ensure document storage directory exists"""
+        storage_path = Path(self.settings.DOCUMENT_STORAGE_PATH)
+        storage_path.mkdir(parents=True, exist_ok=True)
+        return storage_path
+
     async def upload(self, file: UploadFile, model_config: ModelConfig) -> FileMetadata:
         try:
             logger.info(f"Uploading file {file.filename}")
-            # Create a temporary file to handle the upload
             content = await file.read()
             logger.info(f"File size: {len(content) / 1024:.1f}KB")
-            with NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
-                logger.info(f"Temporary file: {tmp_file.name}")
-                tmp_file.write(content)
-                tmp_file.flush()
 
-                with open(tmp_file.name, 'rb') as f:
-                    first_bytes = f.read(4)
-                    logger.info(f"First bytes of file: {first_bytes.hex()}")
+            # Ensure storage directory exists and get path for new file
+            storage_path = self._ensure_storage_path()
+            file_id = str(uuid4())
+            pdf_path = storage_path / f"{file_id}.pdf"
 
-                try:
-                    # Now open with PyMuPDF
-                    pdf = pymupdf.open(tmp_file.name)
-                    pages = len(pdf)
-                    logger.info(f"successfully opened PDF with {pages} pages")
-                except Exception as e:
-                    logger.error(f"Failed to open PDF file: {e}")
-                    raise HTTPException(status_code=500, detail="Failed to open PDF file")
+            # Save the PDF file permanently
+            with open(pdf_path, 'wb') as f:
+                f.write(content)
 
-                # Extract text for RAG
-                text_content = ""
-                for page_num in range(pages):
-                    page = pdf.load_page(page_num)
-                    text_content += page.get_text()
+            try:
+                # Now open with PyMuPDF
+                pdf = pymupdf.open(str(pdf_path))
+                pages = len(pdf)
+                logger.info(f"successfully opened PDF with {pages} pages")
+            except Exception as e:
+                logger.error(f"Failed to open PDF file: {e}")
+                pdf_path.unlink(missing_ok=True)  # Clean up file if we can't open it
+                raise HTTPException(status_code=500, detail="Failed to open PDF file")
 
-                pdf.close()
+            # Create file record
+            file_model = FileModel(
+                id=file_id,
+                name=file.filename,
+                size=f"{len(content) / 1024:.1f}KB",
+                pages=pages,
+                vector_store_id=str(uuid4()),
+                embedding_provider=model_config.provider,
+                file_path=str(pdf_path)
+            )
 
-                # Create file record
-                file_model = FileModel(
-                    name=file.filename,
-                    size=f"{len(content) / 1024:.1f}KB",
-                    pages=pages,
-                    vector_store_id=str(uuid4()),
-                    embedding_provider=model_config.provider
-                )
+            # Process through RAG
+            await self.rag.process_document(
+                content,
+                file_model.vector_store_id,
+                model_config
+            )
 
-                # Process through RAG
-                await self.rag.process_document(
-                    content,
-                    file_model.vector_store_id,
-                    model_config
-                )
+            # Save to database
+            self.db.add(file_model)
+            await self.db.commit()
 
-                # Save to database
-                self.db.add(file_model)
-                await self.db.commit()
+            pdf.close()
 
-                return FileMetadata(
-                    id=file_model.id,
-                    name=file_model.name,
-                    size=file_model.size,
-                    pages=pages,
-                    uploaded_at=file_model.uploaded_at
-                )
+            return FileMetadata(
+                id=file_model.id,
+                name=file_model.name,
+                size=file_model.size,
+                pages=pages,
+                uploaded_at=file_model.uploaded_at
+            )
 
         except Exception as e:
             import traceback
             logger.error(f"Failed to upload file {file.filename}: {str(e)}\n{traceback.format_exc()}")
+            # Clean up file if it exists
+            if 'pdf_path' in locals():
+                pdf_path.unlink(missing_ok=True)
             await self.db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            # Clean up temporary file
-            if 'tmp_file' in locals():
-                os.unlink(tmp_file.name)
 
     async def get_files(self) -> list[FileMetadata]:
         result = await self.db.execute(select(FileModel))
@@ -112,13 +115,17 @@ class StorageService:
         file = result.scalar_one_or_none()
         if file:
             try:
-                # Clean up vector store first
+                # Delete the PDF file
+                if file.file_path:
+                    Path(file.file_path).unlink(missing_ok=True)
+
+                # Clean up vector store
                 try:
-                    await self.rag.qdrant.delete_collection(file.vector_store_id)
+                    await self.rag.chroma_provider.delete_collection(file.vector_store_id)
                 except Exception as e:
                     logger.error(f"Failed to delete vector store {file.vector_store_id}: {e}")
 
-                # Then remove database record
+                # Remove database record
                 await self.db.delete(file)
                 await self.db.commit()
             except Exception as e:

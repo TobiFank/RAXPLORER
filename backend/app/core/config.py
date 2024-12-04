@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
 
+    # Full document Storage
+    DOCUMENT_STORAGE_PATH: str = "storage/documents"
+
     # API
     API_V1_PREFIX: str = "/api/v1"
 
