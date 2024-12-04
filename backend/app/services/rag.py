@@ -12,6 +12,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+from sqlalchemy.testing.suite.test_reflection import metadata
 
 from .llm import LLMService
 from .rag_dependencies import (
@@ -596,7 +597,8 @@ class RAGService:
                     text=text,
                     quote_start=quote_start,
                     quote_end=quote_end,
-                    file_path=chunk.metadata.get('file_path')
+                    file_path=chunk.metadata.get('file_path'),
+                    metadata={'document_id': doc_id}
                 ))
 
         # If no explicit citations found, try to match content
@@ -616,7 +618,8 @@ class RAGService:
                             text=chunk.page_content,
                             quote_start=sentence[:50],
                             quote_end=sentence[-50:] if len(sentence) > 50 else sentence,
-                            file_path=chunk.metadata.get('file_path')
+                            file_path=chunk.metadata.get('file_path'),
+                            metadata={'document_id': chunk.metadata['document_id']}
                         ))
                         break  # One citation per chunk is enough
 
@@ -637,10 +640,12 @@ class RAGService:
         citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
         matches = list(re.finditer(citation_pattern, response))
 
+        logger.info(f"Found citation matches: {matches}")
+
         for match in matches:
-            doc_name = match.group(1)
+            doc_id = match.group(1)  # This is the UUID
             page = int(match.group(2))
-            key = (doc_name, page)
+            key = (doc_id, page)
 
             if key not in citation_map:
                 citation_map[key] = current_citation
@@ -648,12 +653,20 @@ class RAGService:
 
             processed_text = processed_text.replace(match.group(0), f'[{citation_map[key]}]')
 
+        logger.info(f"Processed text after replacing citations: {processed_text}")
+        logger.info(f"Citation map: {citation_map}")
+
         # Build references section
         references = []
-        for (doc_name, page), number in sorted(citation_map.items(), key=lambda x: x[1]):
-            citation = next((c for c in citations if c.document_name == doc_name and c.page_number == page), None)
+        for (doc_id, page), number in sorted(citation_map.items(), key=lambda x: x[1]):
+            # Find citation by matching document_id in metadata
+            citation = next((c for c in citations
+                             if c.text and 'document_id' in c.metadata
+                             and c.metadata['document_id'] == doc_id
+                             and c.page_number == page), None)
+
             if citation:
-                # Include file path for clickable reference
+                # Use the friendly name for display
                 ref_text = f"[{number}] {citation.document_name}, Page {page}"
                 if citation.file_path:
                     ref_text += f" [View Document]({citation.file_path})"

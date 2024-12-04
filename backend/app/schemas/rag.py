@@ -1,7 +1,8 @@
 # app/schemas/rag.py
 from typing import List, Optional
-from pydantic import BaseModel
-from datetime import datetime
+
+from pydantic import BaseModel, Field
+
 
 class Citation(BaseModel):
     document_name: str
@@ -9,8 +10,10 @@ class Citation(BaseModel):
     section: Optional[str] = None
     text: str
     quote_start: str  # First few words of the quote
-    quote_end: str    # Last few words of the quote
+    quote_end: str  # Last few words of the quote
     file_path: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
 
 class ImageReference(BaseModel):
     image_id: str
@@ -19,6 +22,7 @@ class ImageReference(BaseModel):
     image_type: str  # 'image', 'table', 'diagram'
     caption: Optional[str] = None
     file_path: Optional[str] = None
+
 
 class RAGResponse(BaseModel):
     answer: str
