@@ -143,7 +143,8 @@ class ChatService:
                 "reasoning": rag_response.reasoning,
                 "confidence_score": rag_response.confidence_score
             }
-            yield json.dumps(response_data)
+            #yield json.dumps(response_data)
+            yield rag_response.answer
 
         except Exception as e:
             logger.error(f"Error in stream_response: {str(e)}")
