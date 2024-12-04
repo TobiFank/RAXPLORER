@@ -1,4 +1,5 @@
 # app/services/chat.py
+import json
 from datetime import datetime
 
 from fastapi import HTTPException
@@ -134,8 +135,15 @@ class ChatService:
             )
             await self.db.commit()
 
-            # Stream the response
-            yield rag_response.answer
+            # Stream the response with metadata as JSON
+            response_data = {
+                "answer": rag_response.answer,
+                "citations": [citation.dict() for citation in rag_response.citations],
+                "images": [image.dict() for image in rag_response.images],
+                "reasoning": rag_response.reasoning,
+                "confidence_score": rag_response.confidence_score
+            }
+            yield json.dumps(response_data)
 
         except Exception as e:
             logger.error(f"Error in stream_response: {str(e)}")

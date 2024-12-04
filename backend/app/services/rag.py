@@ -63,11 +63,15 @@ Images Available:
 {images}
 
 Instructions:
-1. Answer the question using information from the context
+1. Answer the question using ONLY information from the provided context
 2. Use logical reasoning to connect information
-3. Cite sources using [Doc: Page X] format
+3. You MUST cite ALL sources using [Doc: ID, Page X] format IMMEDIATELY after each piece of information
 4. Reference relevant images using [Image X] format
 5. Maintain high confidence in your answer
+6. Be explicit about which document each piece of information comes from
+
+Example citation format:
+"John works at ABC Corp [Doc: doc123, Page 1] and has 5 years of experience [Doc: doc456, Page 3]"
 
 Answer in this structured format:
 Answer: [Your detailed answer with inline citations]
@@ -413,20 +417,55 @@ class RAGService:
     ) -> List[Citation]:
         """Extract and validate citations from the response"""
         citations = []
-        # Simple regex might not be enough here - might need more sophisticated parsing
-        for chunk in chunks:
-            if chunk.page_content in response:
-                # Get a snippet of the quote
-                quote_words = chunk.page_content.split()
-                quote_start = " ".join(quote_words[:3])
-                quote_end = " ".join(quote_words[-3:])
+
+        # First look for explicit citations in the format [Doc: X, Page Y]
+        import re
+        citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
+        explicit_citations = re.finditer(citation_pattern, response)
+
+        # Create a map of document_id -> chunk for easier lookup
+        chunk_map = {
+            chunk.metadata['document_id']: chunk
+            for chunk in chunks
+        }
+
+        # Process explicit citations
+        for match in explicit_citations:
+            doc_id = match.group(1)
+            page_num = int(match.group(2))
+
+            if doc_id in chunk_map:
+                chunk = chunk_map[doc_id]
+                # Get a snippet of the relevant text
+                text = chunk.page_content
+                words = text.split()
+                quote_start = " ".join(words[:10])  # First 10 words
+                quote_end = " ".join(words[-10:])   # Last 10 words
 
                 citations.append(Citation(
-                    document_name=chunk.metadata['document_id'],
-                    page_number=chunk.metadata['page_num'],
-                    section=chunk.metadata.get('section'),
-                    text=chunk.page_content,
+                    document_name=doc_id,
+                    page_number=page_num,
+                    text=text,
                     quote_start=quote_start,
                     quote_end=quote_end
                 ))
+
+        # If no explicit citations found, try to match content
+        if not citations:
+            for chunk in chunks:
+                # Look for significant portions of the chunk content in the response
+                # Split into sentences and look for matches
+                chunk_sentences = chunk.page_content.split('.')
+                for sentence in chunk_sentences:
+                    sentence = sentence.strip()
+                    if len(sentence) > 20 and sentence in response:  # Only match substantial sentences
+                        citations.append(Citation(
+                            document_name=chunk.metadata['document_id'],
+                            page_number=chunk.metadata['page_num'],
+                            text=chunk.page_content,
+                            quote_start=sentence[:50],
+                            quote_end=sentence[-50:] if len(sentence) > 50 else sentence
+                        ))
+                        break  # One citation per chunk is enough
+
         return citations
