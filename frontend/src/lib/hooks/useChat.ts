@@ -149,19 +149,44 @@ export function useChat() {
 
             // Process the stream
             console.log('Starting to process stream');
-            for await (const chunk of stream) {
-                console.log('Received chunk:', chunk);
-                assistantMessage += chunk;
-                setMessages(prev => {
-                    if (!Array.isArray(prev)) return [userMessage, { ...assistantPlaceholder, content: assistantMessage }];
-                    return [
-                        ...prev.slice(0, -1),
-                        {
-                            ...assistantPlaceholder,
-                            content: assistantMessage,
-                        },
-                    ];
-                });
+            try {
+                for await (const chunk of stream) {
+                    console.log('Received chunk:', chunk);
+                    // Update messages immediately with each chunk
+                    setMessages(prev => {
+                        if (!Array.isArray(prev)) {
+                            return [userMessage, {
+                                role: 'assistant',
+                                content: chunk,
+                                timestamp: new Date().toISOString()
+                            }];
+                        }
+
+                        const lastMessage = prev[prev.length - 1];
+                        if (lastMessage.role === 'assistant') {
+                            // Append chunk to existing assistant message
+                            return [
+                                ...prev.slice(0, -1),
+                                {
+                                    ...lastMessage,
+                                    content: lastMessage.content + chunk
+                                }
+                            ];
+                        } else {
+                            // Create new assistant message
+                            return [...prev, {
+                                role: 'assistant',
+                                content: chunk,
+                                timestamp: new Date().toISOString()
+                            }];
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error('Error processing stream:', err);
+                setError('Failed to process response stream');
+                setIsLoading(false);
+                return;
             }
 
             // Update chats list

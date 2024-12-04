@@ -121,25 +121,27 @@ export const chatApi = {
                 throw new Error('No response body');
             }
 
-            console.log('Starting to read response stream');
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
 
             while (true) {
-                const {done, value} = await reader.read();
-                if (done) {
-                    console.log('Response stream complete');
-                    break;
-                }
-                const chunk = decoder.decode(value);
-                console.log('Received chunk:', chunk);
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                // Process each chunk immediately
+                const chunk = decoder.decode(value, { stream: true });
                 yield chunk;
             }
+
+            // Final decode to handle any remaining bytes
+            const finalChunk = decoder.decode();
+            if (finalChunk) yield finalChunk;
+
         } catch (error) {
             console.error('Error in sendMessage:', error);
             throw error;
         }
-    },
+    }
 };
 
 // File API
