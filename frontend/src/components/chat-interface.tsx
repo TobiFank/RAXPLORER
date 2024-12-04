@@ -83,9 +83,7 @@ const ChatInterface = () => {
         setIsDragging(false);
 
         const droppedFiles = Array.from(e.dataTransfer.files);
-        for (const file of droppedFiles) {
-            await uploadFile(file, modelConfig);
-        }
+        droppedFiles.forEach(file => uploadFile(file, modelConfig));
     };
 
     const handleTitleSubmit = async (chatId: string) => {
@@ -433,8 +431,9 @@ const ChatInterface = () => {
                                         type="file"
                                         className="hidden"
                                         onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) uploadFile(file, modelConfig);
+                                            const files = Array.from(e.target.files || []);
+                                            // Now handle all files, not just the first one
+                                            files.forEach(file => uploadFile(file, modelConfig));
                                         }}
                                         multiple
                                     />
