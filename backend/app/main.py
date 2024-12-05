@@ -1,4 +1,5 @@
 # app/main.py
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,6 +13,8 @@ from .core.config import Settings
 from .services.llm import LLMService
 from .dependencies import get_chat_service, get_storage_service
 from .services.rag.rag import RAGService
+
+logging.basicConfig(level=logging.DEBUG)
 
 
 @asynccontextmanager

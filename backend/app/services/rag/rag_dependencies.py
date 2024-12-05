@@ -154,14 +154,15 @@ class ChromaProvider(VectorStoreProvider[Document]):
             # Add section type
             metadata['section_type'] = section.section_type.value if section.section_type else 'text'
 
-            # Add spatial information
-            metadata['bbox'] = {
-                'x0': section.bbox.x0,
-                'y0': section.bbox.y0,
-                'x1': section.bbox.x1,
-                'y1': section.bbox.y1,
-                'page_num': section.bbox.page_num
-            }
+            # Add spatial information - convert bbox to JSON string
+            if hasattr(section, 'bbox'):
+                metadata['bbox'] = json.dumps({
+                    'x0': section.bbox.x0,
+                    'y0': section.bbox.y0,
+                    'x1': section.bbox.x1,
+                    'y1': section.bbox.y1,
+                    'page_num': section.bbox.page_num
+                })
 
             # Process images
             if section.images:

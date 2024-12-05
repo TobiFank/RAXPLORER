@@ -120,7 +120,7 @@ class RAGService:
             logger.info(f"Processing document {original_filename}")
 
             processor = DocumentProcessor()
-            sections, images = processor.process_pdf(temp_pdf_path, file_id)
+            sections = processor.process_pdf(temp_pdf_path, file_id)
 
             # Enhance section metadata with image relationships
             for section in sections:
