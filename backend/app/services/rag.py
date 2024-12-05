@@ -29,29 +29,29 @@ logger = logging.getLogger(__name__)
 
 class SubQuestion(BaseModel):
     """Model for decomposed questions"""
-    question: str = Field(description="The sub-question to be answered")
-    reasoning: str = Field(description="Why this sub-question is relevant")
+    question: str = Field(description="The sub-queries to be answered")
+    reasoning: str = Field(description="Why this sub-query is relevant")
 
 
 class QueryAnalysis(BaseModel):
     """Model for query analysis output"""
     main_intent: str = Field(description="The main intent of the query")
-    sub_questions: List[SubQuestion] = Field(description="List of sub-questions to answer")
+    sub_questions: List[SubQuestion] = Field(description="List of sub-queries to answer")
 
 
-QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-questions.
+QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-queries.
 Main Query: {query}
 
 Please respond with a JSON object that contains:
 1. A "main_intent" field with a string describing the core purpose of the query
-2. A "sub_questions" array containing objects with "question" and "reasoning" fields
+2. A "sub_queries" array containing objects with "queries" and "reasoning" fields
 
 Example response format:
-{{"main_intent": "understand what the user means by X", "sub_questions": [{{"question": "what is X?", "reasoning": "need to clarify the basic concept"}}]}}
+{{"main_intent": "understand what the user means by X", "sub_queries": [{{"query": "what is X?", "reasoning": "need to clarify the basic concept"}}]}}
 
 Remember: Respond ONLY with the JSON object, no other text or schema information.
 
-Question to analyze: {query}"""
+Query to analyze: {query}"""
 
 STEP_BACK_PROMPT = """Before directly answering the query, let's take a step back and think about the broader context.
 Query: {query}
@@ -59,18 +59,18 @@ Query: {query}
 What broader topics or concepts should we consider to provide a more comprehensive answer?
 Focus on generating a more general query that will help retrieve relevant context."""
 
-ANSWER_GENERATION_PROMPT = """Given the following context and question, provide a comprehensive answer. Use the context carefully and cite your sources.
+ANSWER_GENERATION_PROMPT = """Given the following context and query, provide a comprehensive answer. Use the context carefully and cite your sources.
 
 Context:
 {context}
 
-Question: {question}
+Query: {question}
 
 Images Available:
 {images}
 
 Instructions:
-1. Answer the question using ONLY information from the provided context
+1. Answer the query using ONLY information from the provided context
 2. Use logical reasoning to connect information
 3. You MUST cite ALL sources using [Doc: ID, Page X] format IMMEDIATELY after each piece of information
 4. Reference relevant images using [Image X] format
@@ -89,7 +89,7 @@ If any of the retrieved chunks have associated images that would help explain th
 include a reference to them in your answer using [Image X] notation. For example:
 - When explaining a diagram: "As we can see in [Image 1], the process flows from..."
 - When an image provides evidence: "The document shows this clearly in [Image 2]"
-Only reference images that are directly relevant to answering the question."""
+Only reference images that are directly relevant to answering the query."""
 
 
 class RAGService:
@@ -101,8 +101,8 @@ class RAGService:
 
         # Initialize text splitter for hierarchical chunking
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
+            chunk_size=1024,
+            chunk_overlap=0,
             length_function=len,
             separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
         )
