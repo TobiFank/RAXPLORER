@@ -7,7 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.sql import select
 
 from .llm import LLMService
-from .rag import RAGService
+from .rag.rag import RAGService
 from ..db.models import ChatModel, FileModel
 from ..db.session import AsyncSession
 from ..schemas.chat import Chat
@@ -162,7 +162,7 @@ class ChatService:
     2. Add relevant synonyms or related terms
     3. Make implicit subjects explicit
     4. Include contextual information from recent messages
-    5. Break compound questions into their core concepts
+    5. Break compound queries into their core concepts
     
     Keep the enhanced query focused and relevant. Don't add speculative content.
     Output only the enhanced query, nothing else."""

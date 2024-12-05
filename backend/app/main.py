@@ -11,7 +11,7 @@ from .api import chat, files, models
 from .core.config import Settings
 from .services.llm import LLMService
 from .dependencies import get_chat_service, get_storage_service
-from .services.rag import RAGService
+from .services.rag.rag import RAGService
 
 
 @asynccontextmanager

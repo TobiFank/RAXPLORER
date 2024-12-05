@@ -1,31 +1,43 @@
 # app/services/rag_dependencies.py
 import json
 import logging
-from dataclasses import dataclass
-from enum import Enum
-from typing import TypeVar, Generic, List
+from typing import TypeVar, Generic, Union
 
 import chromadb
 import numpy as np
 from langchain_core.documents import Document
 from rank_bm25 import BM25Okapi
 
-from ..schemas.model import Provider
+from ...schemas.model import Provider
 
 logger = logging.getLogger(__name__)
 
 # Types for provider-specific implementations
 T = TypeVar('T')
 
+from dataclasses import dataclass
+from typing import List, Optional, Dict
+from enum import Enum
 
-class DocumentSection:
-    """Represents a section in a document with its metadata"""
 
-    def __init__(self, content: str, metadata: dict):
-        self.content = content
-        self.metadata = metadata
-        # Store images separately but linked to this section
-        self.images: List[DocumentImage] = []
+class SectionType(str, Enum):
+    TITLE = "title"
+    HEADING = "heading"
+    PARAGRAPH = "paragraph"
+    LIST = "list"
+    TABLE = "table"
+    IMAGE = "image"
+    CAPTION = "caption"
+
+
+@dataclass
+class BoundingBox:
+    """Represents the spatial location of content on a page"""
+    x0: float  # left
+    y0: float  # top
+    x1: float  # right
+    y1: float  # bottom
+    page_num: int
 
 
 @dataclass
@@ -33,8 +45,66 @@ class DocumentImage:
     """Represents an image extracted from a document"""
     image_data: bytes
     page_num: int
-    image_type: str  # 'image', 'table', 'diagram'
-    metadata: dict
+    image_type: str
+    bbox: BoundingBox
+    metadata: Dict[str, any]
+    caption: Optional[str] = None
+    referenced_by: List[str] = None  # List of section IDs that reference this image
+
+
+class DocumentSection:
+    """Represents a section in a document with its spatial information"""
+
+    def __init__(self,
+                 content: str,
+                 bbox: BoundingBox,
+                 section_type: SectionType,
+                 metadata: dict):
+        self.id = metadata.get('section_id')
+        self.content = content
+        self.bbox = bbox
+        self.section_type = section_type
+        self.metadata = metadata
+        self.images: List[DocumentImage] = []
+        self.nearby_sections: List['DocumentSection'] = []  # Sections spatially close to this one
+
+    def overlaps_with(self, bbox: BoundingBox, threshold: float = 0.3) -> bool:
+        """Check if this section overlaps with a given bounding box"""
+        if self.bbox.page_num != bbox.page_num:
+            return False
+
+        # Calculate intersection area
+        x_left = max(self.bbox.x0, bbox.x0)
+        y_top = max(self.bbox.y0, bbox.y0)
+        x_right = min(self.bbox.x1, bbox.x1)
+        y_bottom = min(self.bbox.y1, bbox.y1)
+
+        if x_right < x_left or y_bottom < y_top:
+            return False
+
+        intersection = (x_right - x_left) * (y_bottom - y_top)
+        section_area = (self.bbox.x1 - self.bbox.x0) * (self.bbox.y1 - self.bbox.y0)
+
+        return intersection / section_area > threshold
+
+    def is_nearby(self, other: Union['DocumentSection', BoundingBox], distance_threshold: float = 50) -> bool:
+        """Check if another section/bbox is spatially close to this one"""
+        other_bbox = other.bbox if isinstance(other, DocumentSection) else other
+
+        if self.bbox.page_num != other_bbox.page_num:
+            return False
+
+        vertical_distance = min(
+            abs(self.bbox.y1 - other_bbox.y0),
+            abs(other_bbox.y1 - self.bbox.y0)
+        )
+
+        horizontal_distance = min(
+            abs(self.bbox.x1 - other_bbox.x0),
+            abs(other_bbox.x1 - self.bbox.x0)
+        )
+
+        return min(vertical_distance, horizontal_distance) <= distance_threshold
 
 
 class EmbeddingProvider(Enum):
@@ -49,7 +119,8 @@ class VectorStoreProvider(Generic[T]):
     def __init__(self, collection_name: str):
         self.collection_name = collection_name
 
-    async def store_embeddings(self, sections: List[DocumentSection], embeddings: List[List[float]]):
+    async def store_embeddings(self, provider: Provider, sections: List[DocumentSection],
+                               embeddings: List[List[float]]):
         raise NotImplementedError
 
     async def query(self, query_embedding: List[float], top_k: int = 5) -> List[T]:
@@ -70,28 +141,56 @@ class ChromaProvider(VectorStoreProvider[Document]):
 
     async def store_embeddings(self, provider: Provider, sections: List[DocumentSection],
                                embeddings: List[List[float]]):
-        """Store embeddings for a specific provider"""
+        """Store embeddings with enhanced section metadata"""
         collection = self.get_collection(provider)
 
         documents = [section.content for section in sections]
-        metadatas = [section.metadata.copy() for section in sections]
+        metadatas = []
 
-        for metadata in metadatas:
-            logger.info(f"Storing document with metadata: {metadata}")
+        for section in sections:
+            # Convert basic metadata
+            metadata = section.metadata.copy()
 
-        for idx, section in enumerate(sections):
+            # Add section type
+            metadata['section_type'] = section.section_type.value if section.section_type else 'text'
+
+            # Add spatial information
+            metadata['bbox'] = {
+                'x0': section.bbox.x0,
+                'y0': section.bbox.y0,
+                'x1': section.bbox.x1,
+                'y1': section.bbox.y1,
+                'page_num': section.bbox.page_num
+            }
+
+            # Process images
             if section.images:
-                metadatas[idx]['images'] = json.dumps([
+                metadata['images'] = json.dumps([
                     {
                         'page_num': img.page_num,
                         'image_index': img.metadata.get('image_index'),
                         'image_type': img.image_type,
-                        'caption': img.metadata.get('caption'),
+                        'caption': img.caption,
                         'extension': img.metadata.get('extension', 'png'),
-                        'file_path': img.metadata.get('file_path')
+                        'file_path': img.metadata.get('file_path'),
+                        'bbox': {
+                            'x0': img.bbox.x0,
+                            'y0': img.bbox.y0,
+                            'x1': img.bbox.x1,
+                            'y1': img.bbox.y1,
+                        }
                     }
                     for img in section.images
                 ])
+
+            # Add nearby section references
+            if section.nearby_sections:
+                metadata['nearby_section_ids'] = json.dumps([
+                    s.metadata.get('section_id') for s in section.nearby_sections
+                ])
+
+            metadatas.append(metadata)
+            logger.info(f"Storing section with metadata: {metadata}")
 
         ids = [str(i) for i in range(len(sections))]
         collection.add(
@@ -102,6 +201,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
         )
 
     async def query(self, provider: Provider, query_embedding: List[float], top_k: int = 5) -> List[Document]:
+        """Query with enhanced metadata handling"""
         collection = self.get_collection(provider)
         results = collection.query(
             query_embeddings=[query_embedding],
@@ -125,6 +225,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
                             'image_index': img['image_index'],
                             'image_type': img['image_type'],
                             'caption': img.get('caption'),
+                            'bbox': img.get('bbox'),
                             'file_path': f"storage/images/{metadata['document_id']}_{img['page_num']}_{img['image_index']}.{img.get('extension', 'png')}"
                         }
                         for img in images_data
@@ -132,6 +233,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
                 except json.JSONDecodeError:
                     logger.warning(f"Failed to decode images metadata: {metadata['images']}")
 
+            # Create document with enhanced metadata
             doc = Document(
                 page_content=content,
                 metadata={
@@ -140,7 +242,10 @@ class ChromaProvider(VectorStoreProvider[Document]):
                     'section_type': metadata.get('section_type', 'text'),
                     'images': processed_images,
                     'file_path': metadata.get('file_path'),
-                    'name': metadata.get('name')
+                    'name': metadata.get('name'),
+                    'bbox': metadata.get('bbox'),  # Include spatial information
+                    'nearby_section_ids': json.loads(metadata['nearby_section_ids']) if metadata.get(
+                        'nearby_section_ids') else []
                 }
             )
             documents.append(doc)
@@ -170,7 +275,6 @@ class ChromaProvider(VectorStoreProvider[Document]):
                 logger.error(f"Failed to delete embeddings for provider {provider}: {str(e)}")
                 # Continue with other providers even if one fails
                 continue
-
 
 
 # Add BM25 implementation for hybrid search

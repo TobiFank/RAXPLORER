@@ -5,38 +5,35 @@ import re
 from pathlib import Path
 from typing import List, Tuple
 
-import fitz
 from fastapi import HTTPException
 from langchain.prompts import PromptTemplate
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
-from sqlalchemy.testing.suite.test_reflection import metadata
 
-from .llm import LLMService
+from .document_processor import DocumentProcessor
 from .rag_dependencies import (
-    ChromaProvider, BM25Retriever, DocumentSection,
-    DocumentImage
+    ChromaProvider, BM25Retriever, DocumentSection
 )
-from ..core.config import Settings
-from ..db.models import FileModel
-from ..schemas.model import ModelConfig, Provider
-from ..schemas.rag import RAGResponse, ImageReference, Citation
+from ..llm import LLMService
+from ...core.config import Settings
+from ...db.models import FileModel
+from ...schemas.model import ModelConfig, Provider
+from ...schemas.rag import RAGResponse, ImageReference, Citation
 
 logger = logging.getLogger(__name__)
 
 
-class SubQuestion(BaseModel):
-    """Model for decomposed questions"""
-    question: str = Field(description="The sub-queries to be answered")
+class SubQuery(BaseModel):
+    """Model for decomposed queries"""
+    query: str = Field(description="The sub-queries to be answered")
     reasoning: str = Field(description="Why this sub-query is relevant")
 
 
 class QueryAnalysis(BaseModel):
     """Model for query analysis output"""
     main_intent: str = Field(description="The main intent of the query")
-    sub_questions: List[SubQuestion] = Field(description="List of sub-queries to answer")
+    sub_queries: List[SubQuery] = Field(description="List of sub-queries to answer")
 
 
 QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-queries.
@@ -64,7 +61,7 @@ ANSWER_GENERATION_PROMPT = """Given the following context and query, provide a c
 Context:
 {context}
 
-Query: {question}
+Query: {query}
 
 Images Available:
 {images}
@@ -99,14 +96,6 @@ class RAGService:
         self.bm25_retriever = BM25Retriever()
         self.settings = Settings()
 
-        # Initialize text splitter for hierarchical chunking
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1024,
-            chunk_overlap=0,
-            length_function=len,
-            separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
-        )
-
         # Initialize prompt templates and parsers
         self.query_analyzer = PydanticOutputParser(pydantic_object=QueryAnalysis)
         self.query_analysis_prompt = PromptTemplate(
@@ -120,201 +109,76 @@ class RAGService:
         )
 
     async def process_document(self, file_content: bytes, file_model: FileModel, model_config: ModelConfig):
-        """Process a document and store embeddings for all providers"""
         try:
-            # Get original filename from database
+            temp_pdf_path = f"storage/documents/{file_model.id}.pdf"
+            os.makedirs(os.path.dirname(temp_pdf_path), exist_ok=True)
+            with open(temp_pdf_path, 'wb') as f:
+                f.write(file_content)
+
             file_id = file_model.vector_store_id
             original_filename = file_model.name
+            logger.info(f"Processing document {original_filename}")
 
-            # Open PDF with PyMuPDF
-            logger.info(f"Processing document {file_model.name}")
-            pdf_document = fitz.open(stream=file_content, filetype="pdf")
-            sections: List[DocumentSection] = []
+            processor = DocumentProcessor()
+            sections, images = processor.process_pdf(temp_pdf_path, file_id)
 
-            # Process each page
-            for page_num in range(len(pdf_document)):
-                page = pdf_document[page_num]
+            # Enhance section metadata with image relationships
+            for section in sections:
+                if section.images:
+                    section.metadata['images'] = [{
+                        'image_id': f"{img.page_num}_{img.metadata['image_index']}",
+                        'image_type': img.image_type,
+                        'caption': img.caption,
+                        'file_path': img.metadata['file_path'],
+                        'bbox': img.bbox.__dict__
+                    } for img in section.images]
 
-                # Extract text and split into sections
-                text = page.get_text()
-                raw_sections = self.text_splitter.split_text(text)
-
-                # Extract images and tables
-                try:
-                    logger.info(f"Found {len(page.get_images())} images on page {page_num}")
-                    logger.info(f"Image list: {page.get_images()}")
-
-                    for img_index, img_info in enumerate(page.get_images()):
-                        try:
-                            # Get raw image data
-                            # img_info structure: (xref, smask, width, height, bpc, colorspace, ...)
-                            xref = img_info[0]  # xref number
-                            width = img_info[2]  # width
-                            height = img_info[3]  # height
-
-                            # Get image data directly from the PDF
-                            pix = fitz.Pixmap(pdf_document, xref)
-
-                            # Convert to RGB if necessary
-                            if pix.n - pix.alpha > 3:
-                                pix = fitz.Pixmap(fitz.csRGB, pix)
-
-                            # Create image path
-                            image_filename = f"{file_id}_{page_num}_{img_index}.png"
-                            image_path = f"storage/images/{image_filename}"
-
-                            # Ensure directory exists
-                            os.makedirs(os.path.dirname(image_path), exist_ok=True)
-
-                            # Save as PNG
-                            pix.save(image_path)
-                            logger.info(f"Saved image to {image_path}")
-
-                            # Create DocumentImage
-                            image = DocumentImage(
-                                image_data=pix.samples,
-                                page_num=page_num,
-                                image_type="image",
-                                metadata={
-                                    "page_num": page_num,
-                                    "image_index": img_index,
-                                    "extension": "png",
-                                    "file_path": image_path,
-                                    "width": pix.width,
-                                    "height": pix.height,
-                                    "has_alpha": pix.alpha > 0
-                                }
-                            )
-
-                            # Add to the most recent section
-                            if sections:
-                                sections[-1].images.append(image)
-                                logger.info(f"Added image {image_path} to section")
-
-                            # Clean up
-                            pix = None
-
-                        except Exception as e:
-                            logger.error(f"Failed to extract image {img_index} from page {page_num}: {str(e)}, info: {img_info}")
-                            continue
-
-                except Exception as e:
-                    logger.error(f"Failed to process images on page {page_num}: {str(e)}")
-
-                # Create sections with metadata
-                for section_text in raw_sections:
-                    section = DocumentSection(
-                        content=section_text,
-                        metadata={
-                            "page_num": page_num,
-                            "document_id": file_id,
-                            "section_type": "text",
-                            "name": original_filename,
-                            "file_path": file_model.file_path
-                        }
-                    )
-                    sections.append(section)
-
-            valid_providers = []
-            for provider in Provider:
-                try:
-                    provider_config = ModelConfig(
-                        provider=provider,
-                        model=model_config.model,
-                        temperature=model_config.temperature,
-                        systemMessage=model_config.systemMessage,
-                        apiKey=model_config.apiKey  # This could be None or empty
-                    )
-
-                    # Check if provider has required API key
-                    if (provider in [Provider.CLAUDE, Provider.CHATGPT] and not provider_config.apiKey) or \
-                            (provider == Provider.OLLAMA and not self.settings.OLLAMA_HOST):
-                        logger.info(f"Skipping provider {provider} - no API key/host configured")
-                        continue
-
-                    valid_providers.append(provider)
-                except Exception as e:
-                    logger.error(f"Error validating provider {provider}: {str(e)}")
-                    continue
+            # Process with valid providers
+            valid_providers = self._get_valid_providers(model_config)
 
             if not valid_providers:
                 raise HTTPException(
                     status_code=400,
-                    detail="No valid providers found. Please configure at least one provider with valid credentials."
+                    detail="No valid providers found. Please configure at least one provider."
                 )
 
             # Process with each provider
             for provider in valid_providers:
                 try:
                     logger.info(f"Processing with provider: {provider}")
-
-                    # Create provider-specific config
-                    provider_config = ModelConfig(
-                        provider=provider,
-                        model=model_config.model,
-                        temperature=model_config.temperature,
-                        systemMessage=model_config.systemMessage,
-                        apiKey=model_config.apiKey
-                    )
-
-                    # Get provider service for embeddings
+                    provider_config = self._create_provider_config(provider, model_config)
                     provider_service = await self.llm_service.get_provider(provider_config)
 
-                    # Generate embeddings for each section using provider's embedding model
-                    texts = [section.content for section in sections]
-                    embeddings = []
-                    for text in texts:
-                        try:
-                            embedding = await provider_service.get_embeddings(text, provider_config)
-                            embeddings.append(embedding)
-                        except Exception as e:
-                            logger.error(f"Failed to generate embedding for text with provider {provider}: {str(e)}")
-                            raise
-
-                    # Store in provider-specific collection
+                    embeddings = await self._generate_embeddings(sections, provider_service, provider_config)
                     await self.chroma_provider.store_embeddings(
                         provider=provider,
                         sections=sections,
                         embeddings=embeddings
                     )
 
-                    logger.info(f"Successfully processed document with provider {provider}")
-
                 except Exception as e:
                     logger.error(f"Failed to process with provider {provider}: {str(e)}")
-                    # Continue with other providers even if one fails
                     continue
 
-            # Create Document objects for BM25 (provider-independent)
+            # Update BM25 index with enhanced metadata
             documents = [
                 Document(
                     page_content=section.content,
-                    metadata=section.metadata
+                    metadata={
+                        **section.metadata,
+                        'section_type': section.section_type.value,
+                        'nearby_sections': [s.id for s in section.nearby_sections]
+                    }
                 )
                 for section in sections
             ]
-
-            # Update BM25 index
             self.bm25_retriever.fit(documents)
-
-            # Cleanup
-            pdf_document.close()
 
             return True
 
         except Exception as e:
-            import traceback
-            logger.error(f"Document processing failed: {str(e)}\n{traceback.format_exc()}")
-            # Clean up any partially processed files
-            try:
-                # Cleanup logic for failed processing
-                image_dir = Path("storage/images")
-                if image_dir.exists():
-                    for image_file in image_dir.glob(f"{file_id}_*"):
-                        image_file.unlink(missing_ok=True)
-            except Exception as cleanup_error:
-                logger.error(f"Cleanup after failure failed: {str(cleanup_error)}")
-
+            await self._cleanup_on_error(file_id)
+            logger.error(f"Document processing failed: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
     async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:
@@ -348,7 +212,7 @@ class RAGService:
             logger.info(f"Step-back query: {broader_query}")
 
             # Execute all queries in parallel
-            queries = [query, broader_query] + [sq.question for sq in query_analysis.sub_questions]
+            queries = [query, broader_query] + [sq.query for sq in query_analysis.sub_queries]
             all_results = []
 
             for q in queries:
@@ -484,7 +348,7 @@ class RAGService:
         provider = await self.llm_service.get_provider(model_config)
         prompt = ANSWER_GENERATION_PROMPT.format(
             context=formatted_context,
-            question=query,
+            query=query,
             images=formatted_images
         )
 
@@ -702,7 +566,7 @@ class RAGService:
                     api_url = "http://localhost:8000"  # Or get from settings if you prefer
                     web_path = f"{api_url}/storage/documents/{os.path.basename(citation.file_path)}"
                     ref_text += f" [View Document]({web_path}#page={page})"
-                #if citation.quote_start and citation.quote_end:
+                # if citation.quote_start and citation.quote_end:
                 #    ref_text += f"\nQuote: \"{citation.quote_start}...{citation.quote_end}\""
                 references.append(ref_text)
 
@@ -718,3 +582,47 @@ class RAGService:
         logger.info(f"Built references text: {references_text}")
 
         return processed_text, references_text, referenced_image_ids
+
+    def _get_valid_providers(self, model_config: ModelConfig) -> List[Provider]:
+        valid_providers = []
+        for provider in Provider:
+            try:
+                provider_config = self._create_provider_config(provider, model_config)
+                if self._is_provider_configured(provider, provider_config):
+                    valid_providers.append(provider)
+            except Exception as e:
+                logger.error(f"Error validating provider {provider}: {str(e)}")
+        return valid_providers
+
+    def _create_provider_config(self, provider: Provider, base_config: ModelConfig) -> ModelConfig:
+        return ModelConfig(
+            provider=provider,
+            model=base_config.model,
+            temperature=base_config.temperature,
+            systemMessage=base_config.systemMessage,
+            apiKey=base_config.apiKey
+        )
+
+    def _is_provider_configured(self, provider: Provider, config: ModelConfig) -> bool:
+        if provider in [Provider.CLAUDE, Provider.CHATGPT]:
+            return bool(config.apiKey)
+        if provider == Provider.OLLAMA:
+            return bool(self.settings.OLLAMA_HOST)
+        return False
+
+    async def _generate_embeddings(self, sections: List[DocumentSection],
+                                   provider_service, provider_config) -> List[List[float]]:
+        embeddings = []
+        for section in sections:
+            embedding = await provider_service.get_embeddings(section.content, provider_config)
+            embeddings.append(embedding)
+        return embeddings
+
+    async def _cleanup_on_error(self, file_id: str):
+        try:
+            image_dir = Path("storage/images")
+            if image_dir.exists():
+                for image_file in image_dir.glob(f"{file_id}_*"):
+                    image_file.unlink(missing_ok=True)
+        except Exception as cleanup_error:
+            logger.error(f"Cleanup after failure failed: {str(cleanup_error)}")
