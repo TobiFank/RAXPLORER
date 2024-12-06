@@ -33,6 +33,7 @@ class DocumentProcessor:
     def process_pdf(self, pdf_path: str, file_id: str, original_filename: str) -> List[DocumentSection]:
         self.pdf_path = pdf_path
         pdf_document = fitz.open(pdf_path)
+        logger.info(f"PDF {original_filename} opened with {len(pdf_document)} pages")
         try:
             # Extract images first
             images = self._extract_images(pdf_document, file_id)
@@ -67,6 +68,8 @@ class DocumentProcessor:
                 # Get spatial info from metadata
                 page_match = re.search(r'\[Page (\d+)\]', node.text)
                 page_num = int(page_match.group(1)) - 1 if page_match else 0
+                logger.info(f"Processing node with text start: {node.text[:100]}...")
+                logger.info(f"Extracted page number: {page_num + 1}")
 
                 section = DocumentSection(
                     content=node.text,
