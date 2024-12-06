@@ -1,7 +1,7 @@
 # app/services/llm.py
 import json
 import logging
-from typing import Protocol, AsyncGenerator
+from typing import Protocol, AsyncGenerator, List
 
 import httpx
 from anthropic import AsyncAnthropic
@@ -20,6 +20,9 @@ class LLMProvider(Protocol):
     async def validate_config(self, config: ModelConfig) -> dict: ...
 
     async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]: ...
+
+    async def get_embeddings_batch(self, all_queries, model_config):
+        pass
 
 
 class ClaudeProvider:
@@ -146,7 +149,7 @@ class OllamaProvider:
         settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
-        logger.info(f"Sending formatted messages to Ollama: {messages}")
+        logger.debug(f"Sending formatted messages to Ollama: {messages}")
 
         # Ensure model exists before trying to use it
         await self._ensure_model_exists(config.model, base_url)
@@ -211,6 +214,43 @@ class OllamaProvider:
         except Exception as e:
             logger.error(f"Error getting embeddings from Ollama: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_embeddings_batch(self, texts: List[str], config: ModelConfig) -> List[List[float]]:
+        settings = Settings()
+        base_url = settings.OLLAMA_HOST or "http://ollama:11434"
+
+        # Load model only once
+        await self._ensure_embedding_model_exists(settings.OLLAMA_EMBEDDING_MODEL, base_url)
+
+        # Use a single client for all requests to reuse connection
+        async with httpx.AsyncClient() as client:
+            embeddings = []
+            for text in texts:
+                try:
+                    response = await client.post(
+                        f"{base_url}/api/embeddings",
+                        json={
+                            "model": settings.OLLAMA_EMBEDDING_MODEL,
+                            "prompt": text
+                        },
+                        timeout=None
+                    )
+
+                    if response.status_code != 200:
+                        logger.error(f"Ollama embeddings error: {response.status_code} - {response.text}")
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail=f"Ollama error: {response.text}"
+                        )
+
+                    data = response.json()
+                    embeddings.append(data["embedding"])
+
+                except Exception as e:
+                    logger.error(f"Error getting embedding for text: {str(e)}")
+                    raise HTTPException(status_code=500, detail=str(e))
+
+            return embeddings
 
 
 class LLMService:

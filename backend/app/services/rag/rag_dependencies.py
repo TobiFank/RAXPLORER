@@ -181,7 +181,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
                 ])
 
             metadatas.append(metadata)
-            logger.info(f"Storing section with metadata: {metadata}")
+            logger.debug(f"Storing section with metadata: {metadata}")
 
         ids = [str(i) for i in range(len(sections))]
         collection.add(
@@ -266,6 +266,79 @@ class ChromaProvider(VectorStoreProvider[Document]):
                 logger.error(f"Failed to delete embeddings for provider {provider}: {str(e)}")
                 # Continue with other providers even if one fails
                 continue
+
+    async def query_batch(
+            self,
+            provider: Provider,
+            query_embeddings: List[List[float]],
+            top_k: int = 5
+    ) -> List[List[Document]]:
+        """Query with multiple embeddings at once"""
+        collection = self.get_collection(provider)
+        results = collection.query(
+            query_embeddings=query_embeddings,
+            n_results=top_k
+        )
+
+        all_documents = []
+        for batch_idx in range(len(query_embeddings)):
+            documents = []
+            for idx, content in enumerate(results['documents'][batch_idx]):
+                metadata = results['metadatas'][batch_idx][idx] if results.get('metadatas') else {}
+
+                if 'document_id' not in metadata or 'page_num' not in metadata:
+                    continue
+
+                # Process metadata (keep existing metadata processing code)
+                processed_metadata = self._process_metadata(metadata)
+
+                doc = Document(
+                    page_content=content,
+                    metadata=processed_metadata
+                )
+                documents.append(doc)
+            all_documents.append(documents)
+
+        return all_documents
+
+    def _process_metadata(self, metadata: dict) -> dict:
+        """Helper to process metadata consistently"""
+        processed = {
+            'document_id': metadata['document_id'],
+            'page_num': metadata['page_num'],
+            'section_type': metadata.get('section_type', 'text'),
+            'file_path': metadata.get('file_path'),
+            'name': metadata.get('name'),
+            'bbox': metadata.get('bbox')
+        }
+
+        # Process images if present
+        if 'images' in metadata:
+            try:
+                images_data = json.loads(metadata['images']) if isinstance(metadata['images'], str) else metadata['images']
+                processed['images'] = [
+                    {
+                        'page_num': img.get('page_num', 0),
+                        'image_index': img.get('image_index', 0),
+                        'image_type': img.get('image_type', 'image'),
+                        'caption': img.get('caption'),
+                        'bbox': img.get('bbox'),
+                        'file_path': img.get('file_path')
+                    }
+                    for img in images_data
+                ]
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to decode images metadata: {metadata['images']}")
+                processed['images'] = []
+
+        # Process nearby sections
+        if metadata.get('nearby_section_ids'):
+            try:
+                processed['nearby_section_ids'] = json.loads(metadata['nearby_section_ids'])
+            except json.JSONDecodeError:
+                processed['nearby_section_ids'] = []
+
+        return processed
 
 
 # Add BM25 implementation for hybrid search

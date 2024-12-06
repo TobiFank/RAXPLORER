@@ -138,7 +138,7 @@ class DocumentProcessor:
 
                     # Find caption after successful image handling
                     caption = self._find_image_caption(page, image_rect)
-                    logger.info(f"Image {img_index} caption: {caption}")
+                    logger.debug(f"Image {img_index} caption: {caption}")
 
                     image = DocumentImage(
                         image_data=pix.samples,

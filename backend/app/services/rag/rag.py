@@ -205,31 +205,46 @@ class RAGService:
                     confidence_score=0.7  # Lower confidence since no source documents
                 )
 
-            # 1. Get retrieved chunks using our existing methods
+            # 1. First get all queries we need
             query_analysis = await self._analyze_query(query, model_config)
-            logger.info(f"Query analysis: {query_analysis}")
-
+            logger.debug(f"Query analysis: {query_analysis}")
             broader_query = await self._generate_step_back_query(query, model_config)
-            logger.info(f"Step-back query: {broader_query}")
+            logger.debug(f"Step-back query: {broader_query}")
 
-            # Execute all queries in parallel
-            queries = [query, broader_query] + [sq.query for sq in query_analysis.sub_queries]
+            # Collect all queries that need embeddings
+            all_queries = [
+                query,                                    # Original query
+                broader_query,                           # Step-back query
+                *[sq.query for sq in query_analysis.sub_queries]  # Sub-queries
+            ]
+            logger.debug(f"All queries: {all_queries}")
+
+            # 2. Get embeddings for all queries in one batch
+            provider = await self.llm_service.get_provider(model_config)
+            all_embeddings = await provider.get_embeddings_batch(all_queries, model_config)
+
+            # 3. Process all search results in batch
+            dense_results = await self.chroma_provider.query_batch(
+                provider=model_config.provider,
+                query_embeddings=all_embeddings,
+                top_k=5
+            )
+
+            # Get sparse results for each query
+            sparse_results = [self._sparse_search(q) for q in all_queries]
+
+            # 4. Combine results for each query
             all_results = []
-
-            for q in queries:
-                # Get dense and sparse retrievals
-                dense_results = await self._dense_search(q, model_config)
-                sparse_results = self._sparse_search(q)
-
-                # Combine results using reciprocal rank fusion
-                combined = self._reciprocal_rank_fusion(dense_results, sparse_results)
+            for dense_batch, sparse_batch in zip(dense_results, sparse_results):
+                combined = self._reciprocal_rank_fusion(dense_batch, sparse_batch)
                 all_results.extend(combined)
 
-            # Deduplicate and rank final results
+            # 5. Deduplicate and rank final results
             final_results = self._deduplicate_results(all_results)[:20]  # Top 20 unique results
 
-            # 2. Generate answer with citations and images
+            # 6. Generate answer with citations and images
             return await self.generate_answer(query, final_results, model_config)
+
 
         except Exception as e:
             logger.error(f"Query execution failed: {str(e)}")
@@ -360,7 +375,7 @@ class RAGService:
 
         # Parse the response and extract citations
         citations = self._extract_citations(response, merged_chunks)
-        logger.info(f"Extracted citations: {citations}")
+        logger.debug(f"Extracted citations: {citations}")
 
         # Create structured response
         parts = response.split("Reasoning:", 1)
@@ -384,7 +399,7 @@ class RAGService:
 
         referenced_images = [img for img in images if img.image_id in referenced_image_ids]
 
-        logger.info(f"Final answer: {final_answer}")
+        logger.debug(f"Final answer: {final_answer}")
 
         return RAGResponse(
             answer=final_answer,
@@ -485,7 +500,7 @@ class RAGService:
                 quote_start = sentences[0] if sentences else ""
                 quote_end = sentences[-1] if sentences else ""
 
-                logger.info(f"Chunk metadata: {chunk.metadata}")
+                logger.debug(f"Chunk metadata: {chunk.metadata}")
                 citations.append(Citation(
                     document_name=chunk.metadata['name'],
                     page_number=page_num,
@@ -506,7 +521,7 @@ class RAGService:
                 for sentence in chunk_sentences:
                     sentence = sentence.strip()
                     if len(sentence) > 20 and sentence in response:  # Only match substantial sentences
-                        logger.info(f"Chunk metadata: {chunk.metadata}")
+                        logger.debug(f"Chunk metadata: {chunk.metadata}")
                         citations.append(Citation(
                             document_name=chunk.metadata['name'],
                             page_number=chunk.metadata['page_num'],
@@ -518,7 +533,7 @@ class RAGService:
                         ))
                         break  # One citation per chunk is enough
 
-        logger.info(f"Found citations: {citations}")
+        logger.debug(f"Found citations: {citations}")
         return citations
 
     def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str, List[str]]:
@@ -535,7 +550,7 @@ class RAGService:
         citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
         matches = list(re.finditer(citation_pattern, response))
 
-        logger.info(f"Found citation matches: {matches}")
+        logger.debug(f"Found citation matches: {matches}")
 
         for match in matches:
             doc_id = match.group(1)  # This is the UUID
@@ -548,8 +563,8 @@ class RAGService:
 
             processed_text = processed_text.replace(match.group(0), f'[{citation_map[key]}]')
 
-        logger.info(f"Processed text after replacing citations: {processed_text}")
-        logger.info(f"Citation map: {citation_map}")
+        logger.debug(f"Processed text after replacing citations: {processed_text}")
+        logger.debug(f"Citation map: {citation_map}")
 
         # Build references section
         references = []
@@ -580,7 +595,7 @@ class RAGService:
             image_id = match.group(1)
             referenced_image_ids.append(image_id)
 
-        logger.info(f"Built references text: {references_text}")
+        logger.debug(f"Built references text: {references_text}")
 
         return processed_text, references_text, referenced_image_ids
 

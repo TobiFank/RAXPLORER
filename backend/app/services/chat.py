@@ -188,7 +188,7 @@ class ChatService:
         async for chunk in provider.generate([enhancement_prompt, user_prompt], model_config):
             enhanced_query += chunk
 
-        logger.info(f"Original query: {query}")
-        logger.info(f"Enhanced query: {enhanced_query}")
+        logger.debug(f"Original query: {query}")
+        logger.debug(f"Enhanced query: {enhanced_query}")
 
         return enhanced_query.strip()
