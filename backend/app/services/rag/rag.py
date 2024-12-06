@@ -18,6 +18,7 @@ from .rag_dependencies import (
 from ..llm import LLMService
 from ...core.config import Settings
 from ...db.models import FileModel
+from ...schemas import file
 from ...schemas.model import ModelConfig, Provider
 from ...schemas.rag import RAGResponse, ImageReference, Citation
 
@@ -120,7 +121,7 @@ class RAGService:
             logger.info(f"Processing document {original_filename}")
 
             processor = DocumentProcessor()
-            sections = processor.process_pdf(temp_pdf_path, file_id)
+            sections = processor.process_pdf(temp_pdf_path, file_id, file_model.name)
 
             # Enhance section metadata with image relationships
             for section in sections:

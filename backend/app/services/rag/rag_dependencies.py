@@ -222,12 +222,12 @@ class ChromaProvider(VectorStoreProvider[Document]):
                     images_data = json.loads(metadata['images'])
                     processed_images = [
                         {
-                            'page_num': img['page_num'],
-                            'image_index': img['image_index'],
-                            'image_type': img['image_type'],
+                            'page_num': img.get('page_num', 0),  # Add fallback
+                            'image_index': img.get('image_index', 0),
+                            'image_type': img.get('image_type', 'image'),
                             'caption': img.get('caption'),
                             'bbox': img.get('bbox'),
-                            'file_path': f"storage/images/{metadata['document_id']}_{img['page_num']}_{img['image_index']}.{img.get('extension', 'png')}"
+                            'file_path': img.get('file_path')
                         }
                         for img in images_data
                     ]
