@@ -1,207 +1,192 @@
 # app/services/chat.py
-import uuid
+import json
 from datetime import datetime
-from typing import List, Optional, AsyncGenerator
 
-from app.models.chat import Chat, Message
-from app.schemas.chat import ChatCreate, ChatUpdate
-from app.services.llm.base import LLMConfig
-from app.services.llm.factory import create_llm_service
-from app.services.model_config import ModelConfigService
-from app.services.rag.processor import RAGProcessor
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy import update
+from sqlalchemy.sql import select
+
+from .llm import LLMService
+from .rag.rag import RAGService
+from ..db.models import ChatModel, FileModel
+from ..db.session import AsyncSession
+from ..schemas.chat import Chat
+from ..schemas.model import ModelConfig
+
+import logging
+
+from ..schemas.rag import RAGResponse
+
+logger = logging.getLogger(__name__)
 
 
 class ChatService:
-    def __init__(self, db: Session, rag_processor: RAGProcessor):
+    def __init__(self, db: AsyncSession, llm_service: LLMService, rag_service: RAGService):
         self.db = db
-        self.model_config_service = ModelConfigService(db)
-        self.rag_processor = rag_processor
+        self.llm = llm_service
+        self.rag = rag_service
 
-    def create_chat(self, chat_create: ChatCreate) -> Chat:
-        chat = Chat(
-            id=str(uuid.uuid4()),
-            title=chat_create.title or "New Chat",
-            created_at=datetime.utcnow()
-        )
+    async def create_chat(self) -> Chat:
+        chat = ChatModel(title="New Chat")
         self.db.add(chat)
-        self.db.commit()
-        self.db.refresh(chat)
-        return chat
+        await self.db.commit()
+        return Chat(
+            id=chat.id,
+            title=chat.title,
+            messages=[],
+            created_at=chat.created_at
+        )
 
-    def get_chat(self, chat_id: str) -> Optional[Chat]:
-        chat = self.db.query(Chat).filter(Chat.id == chat_id).first()
+    async def get_chats(self) -> list[Chat]:
+        result = await self.db.execute(select(ChatModel).order_by(ChatModel.created_at.desc()))
+        chats = result.scalars().all()
+        return [
+            Chat(
+                id=chat.id,
+                title=chat.title,
+                messages=chat.messages,
+                created_at=chat.created_at
+            ) for chat in chats
+        ]
+
+    async def get_chat(self, chat_id: str) -> Chat:
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
         if not chat:
             raise HTTPException(status_code=404, detail="Chat not found")
-        return chat
 
-    def list_chats(self) -> List[Chat]:
-        chats = self.db.query(Chat).order_by(Chat.created_at.desc()).all()
+        return Chat(
+            id=chat.id,
+            title=chat.title,
+            messages=chat.messages,
+            created_at=chat.created_at
+        )
 
-        # Add computed properties for each chat
-        for chat in chats:
-            # Add message_count as a property
-            setattr(chat, 'message_count', len(chat.messages))
+    async def delete_chat(self, chat_id: str):
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
+        if chat:
+            await self.db.delete(chat)
+            await self.db.commit()
 
-            # Optionally, add last_message if you want to use it
-            last_message = (self.db.query(Message)
-                            .filter(Message.chat_id == chat.id)
-                            .order_by(Message.timestamp.desc())
-                            .first())
-            setattr(chat, 'last_message', last_message.content if last_message else None)
+    async def update_title(self, chat_id: str, title: str) -> Chat:
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat not found")
 
-        return chats
+        chat.title = title
+        await self.db.commit()
 
-    def update_chat(self, chat_id: str, chat_update: ChatUpdate) -> Chat:
-        chat = self.get_chat(chat_id)
-        for key, value in chat_update.dict(exclude_unset=True).items():
-            setattr(chat, key, value)
-        self.db.commit()
-        self.db.refresh(chat)
-        return chat
+        return Chat(
+            id=chat.id,
+            title=chat.title,
+            messages=chat.messages,
+            created_at=chat.created_at
+        )
 
-    def delete_chat(self, chat_id: str) -> None:
-        chat = self.get_chat(chat_id)
-        self.db.delete(chat)
-        self.db.commit()
+    async def stream_response(self, chat_id: str, content: str, model_config: ModelConfig):
+        if not chat_id:
+            raise HTTPException(status_code=400, detail="chat_id is required")
 
-    def _format_chat_history(self, messages: List[Message], max_messages: int = 10) -> str:
-        """Format the most recent messages into a conversation history string."""
-        recent_messages = messages[-max_messages:] if max_messages else messages
-        formatted_history = []
-        for msg in recent_messages:
-            role = msg.role.capitalize()
-            formatted_history.append(f"{role}: {msg.content}")
-        return "\n\n".join(formatted_history)
-
-    def _create_rag_prompt(self, query: str, context: str) -> str:
-        """Create a RAG-specific prompt that enforces source attribution."""
-        return f"""Answer the following question using the provided context. If the context contains relevant information, you must:
-1. Clearly indicate which document and section the information comes from
-2. Use direct quotes when appropriate
-3. Provide specific page numbers or locations when available
-
-If the context doesn't contain relevant information, explicitly state that you are using your general knowledge instead of document-specific information.
-
-Context:
-{context}
-
-Question: {query}
-
-Remember: Always specify your sources! Start with "Based on the provided documents..." if using context, or "Based on my general knowledge..." if not."""
-
-    async def create_message(
-            self,
-            chat_id: str,
-            content: str,
-            model_config: dict,
-            max_history_messages: int = 10
-    ) -> AsyncGenerator[str, None]:
-        """Create a message with RAG integration and stream the response."""
-        print("Starting create_message with RAG integration")
-        chat = self.get_chat(chat_id)
-        response_content = ""
+        result = await self.db.execute(select(ChatModel).filter(ChatModel.id == chat_id))
+        chat = result.scalar_one_or_none()
+        if not chat:
+            raise HTTPException(status_code=404, detail=f"Chat {chat_id} not found")
 
         try:
-            # Get conversation history
-            existing_messages = self.db.query(Message) \
-                .filter(Message.chat_id == chat_id) \
-                .order_by(Message.timestamp.asc()) \
-                .all()
+            # Get all available files for RAG
+            result = await self.db.execute(select(FileModel))
+            files = result.scalars().all()
 
-            conversation_history = self._format_chat_history(
-                existing_messages,
-                max_history_messages
+            # Get RAG response
+            rag_response: RAGResponse = await self.rag.query(
+                content,
+                [f.vector_store_id for f in files],
+                model_config,
+                self.db
             )
 
-            # Retrieve relevant context from documents
-            print("Retrieving relevant context for query:", content)
-            relevant_context = await self.rag_processor.get_relevant_context(
-                query=content,
-                top_k=3  # Adjust based on your needs
+            # Store user message
+            chat.messages.append({
+                "role": "user",
+                "content": content,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+
+            formatted_response = rag_response.answer
+            for idx, img in enumerate(rag_response.images, 1):
+                formatted_response = formatted_response.replace(f"[Image {img.image_id}]", f"Figure {idx}")
+                formatted_response += f"\n[IMAGE:{img.file_path}|Figure {idx}: {img.caption}|{img.image_id}]\n"
+
+                # Store assistant message with enhanced metadata
+            chat.messages.append({
+                "role": "assistant",
+                "content": formatted_response,
+                "timestamp": datetime.utcnow().isoformat(),
+                "metadata": {
+                    "citations": [citation.dict() for citation in rag_response.citations],
+                    "images": [image.dict() for image in rag_response.images],
+                    "reasoning": rag_response.reasoning,
+                    "confidence_score": rag_response.confidence_score
+                }
+            })
+
+            # Update the chat in database
+            await self.db.execute(
+                update(ChatModel)
+                .where(ChatModel.id == chat.id)
+                .values(messages=chat.messages)
             )
+            await self.db.commit()
 
-            # Create RAG-enhanced prompt
-            enhanced_prompt = self._create_rag_prompt(content, relevant_context)
-            print("Enhanced prompt created with context")
+            logger.debug(f"Response: {formatted_response}")
 
-            # Get saved model config
-            provider = model_config["provider"]
-            saved_config = self.model_config_service.get_config(provider)
-            if not saved_config:
-                raise ValueError(f"No configuration found for provider {provider}")
-
-            # Create user message
-            user_message = Message(
-                id=str(uuid.uuid4()),
-                chat_id=chat_id,
-                role="user",
-                content=content,
-                timestamp=datetime.utcnow(),
-                model_provider=provider,
-                model_name=model_config.get("model", ""),
-                temperature=model_config["temperature"]
-            )
-            self.db.add(user_message)
-            self.db.commit()
-
-            # Initialize LLM service
-            llm_service = await create_llm_service(
-                provider=provider,
-                api_key=saved_config.api_key,
-                model=model_config.get("model")
-            )
-
-            # Prepare LLM config with enhanced system message
-            system_message = saved_config.system_message or ""
-            rag_system_message = f"{system_message}\n\nImportant: When responding, always clearly indicate whether you are using information from the provided documents (citing specific sources) or your general knowledge."
-
-            llm_config = LLMConfig(
-                model=model_config.get("model", ""),
-                temperature=model_config["temperature"],
-                top_p=1.0,
-                stop_sequences=[],
-                system_message=rag_system_message,
-                extra_params={}
-            )
-
-            # Stream response from LLM with enhanced prompt
-            async for chunk in llm_service.generate_stream(
-                    enhanced_prompt,
-                    llm_config,
-                    context=conversation_history
-            ):
-                response_content += chunk
-                yield chunk
-
-            # Save assistant message
-            assistant_message = Message(
-                id=str(uuid.uuid4()),
-                chat_id=chat_id,
-                role="assistant",
-                content=response_content,
-                timestamp=datetime.utcnow(),
-                model_provider=provider,
-                model_name=model_config.get("model", ""),
-                temperature=model_config["temperature"]
-            )
-            self.db.add(assistant_message)
-            self.db.commit()
+            yield formatted_response
 
         except Exception as e:
-            print(f"Error in RAG-enhanced message generation: {str(e)}")
-            if response_content:
-                assistant_message = Message(
-                    id=str(uuid.uuid4()),
-                    chat_id=chat_id,
-                    role="assistant",
-                    content=response_content,
-                    timestamp=datetime.utcnow(),
-                    model_provider=provider,
-                    model_name=model_config.get("model", ""),
-                    temperature=model_config["temperature"]
-                )
-                self.db.add(assistant_message)
-                self.db.commit()
+            logger.error(f"Error in stream_response: {str(e)}")
+            await self.db.rollback()
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def enhance_query(self, query: str, chat_messages: list, model_config: ModelConfig) -> str:
+        """Enhance the user query using chat history and other context to improve RAG results"""
+
+        # Create a prompt that helps the model understand what we want
+        enhancement_prompt = {
+            "role": "system",
+            "content": """You are a query enhancement specialist. Your task is to rephrase and expand the given query to improve search results. Consider:
+    1. Recent chat context to understand the full conversation flow
+    2. Add relevant synonyms or related terms
+    3. Make implicit subjects explicit
+    4. Include contextual information from recent messages
+    5. Break compound queries into their core concepts
+    
+    Keep the enhanced query focused and relevant. Don't add speculative content.
+    Output only the enhanced query, nothing else."""
+        }
+
+        # Get recent chat context (last 3 messages for context)
+        recent_context = chat_messages[-3:] if chat_messages else []
+        context_str = "\n".join([f"{msg['role']}: {msg['content']}" for msg in recent_context])
+
+        user_prompt = {
+            "role": "user",
+            "content": f"""Chat History:
+    {context_str}
+    
+    Original Query: {query}
+    
+    Enhance this query for better search results."""
+        }
+
+        # Get LLM provider and generate enhanced query
+        provider = await self.llm.get_provider(model_config)
+        enhanced_query = ""
+        async for chunk in provider.generate([enhancement_prompt, user_prompt], model_config):
+            enhanced_query += chunk
+
+        logger.debug(f"Original query: {query}")
+        logger.debug(f"Enhanced query: {enhanced_query}")
+
+        return enhanced_query.strip()

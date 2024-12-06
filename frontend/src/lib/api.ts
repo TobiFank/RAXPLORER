@@ -2,11 +2,7 @@
 
 import axios from 'axios';
 
-import type {
-    Chat,
-    FileMetadata,
-    ModelConfig
-} from './types';
+import type {Chat, FileMetadata, ModelConfig} from './types';
 
 // API Configuration
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -125,37 +121,41 @@ export const chatApi = {
                 throw new Error('No response body');
             }
 
-            console.log('Starting to read response stream');
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
 
             while (true) {
-                const {done, value} = await reader.read();
-                if (done) {
-                    console.log('Response stream complete');
-                    break;
-                }
-                const chunk = decoder.decode(value);
-                console.log('Received chunk:', chunk);
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                // Process each chunk immediately
+                const chunk = decoder.decode(value, { stream: true });
                 yield chunk;
             }
+
+            // Final decode to handle any remaining bytes
+            const finalChunk = decoder.decode();
+            if (finalChunk) yield finalChunk;
+
         } catch (error) {
             console.error('Error in sendMessage:', error);
             throw error;
         }
-    },
+    }
 };
 
 // File API
 export const fileApi = {
-    uploadFile: async (file: File): Promise<FileMetadata> => {
+    uploadFile: async (file: File, modelConfig: ModelConfig): Promise<FileMetadata> => {
         const formData = new FormData();
         formData.append('file', file);
+        // Send modelConfig as stringified JSON in the model_config field
+        formData.append('model_config_json', JSON.stringify(modelConfig));
 
-        const response = await api.post('/files/upload', formData, {
+        const response = await api.post('/files/', formData, {  // Note the trailing slash
             headers: {
                 'Content-Type': 'multipart/form-data',
-            },
+            }
         });
         return response.data;
     },

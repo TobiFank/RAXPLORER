@@ -1,6 +1,7 @@
 // src/lib/hooks/useFiles.ts
 import {useEffect, useState} from "react";
 import {fileApi, FileMetadata} from "@/lib/api";
+import {ModelConfig} from "@/lib/types";
 
 export function useFiles() {
     const [files, setFiles] = useState<FileMetadata[]>([]);
@@ -24,10 +25,10 @@ export function useFiles() {
         }
     };
 
-    const uploadFile = async (file: File) => {
+    const uploadFile = async (file: File, modelConfig: ModelConfig) => {
         try {
             setIsLoading(true);
-            const uploadedFile = await fileApi.uploadFile(file);
+            const uploadedFile = await fileApi.uploadFile(file, modelConfig);
             setFiles(prev => [...prev, uploadedFile]);
         } catch (err) {
             setError('Failed to upload file');

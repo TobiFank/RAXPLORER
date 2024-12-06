@@ -4,3 +4,7 @@ volumes/
 *.xml
 .idea/
 
+*.sqlite3
+/backend/storage/
+*.bin
+/docs/

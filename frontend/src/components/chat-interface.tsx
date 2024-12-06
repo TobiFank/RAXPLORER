@@ -1,7 +1,7 @@
 'use client';
 // src/components/chat-interface.tsx
 
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ChevronDown, FileText, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
@@ -12,7 +12,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
-import {MODEL_INFORMATION, Provider, Chat} from "@/lib/types";
+import {Chat, MODEL_INFORMATION, Provider} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -50,6 +50,22 @@ const ChatInterface = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [editingChatId, setEditingChatId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState<string>('');
+    const inputRef = useRef<HTMLTextAreaElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTo({
+                top: messagesContainerRef.current.scrollHeight,
+                behavior: 'smooth'
+            });
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        // Focus input when component mounts
+        inputRef.current?.focus();
+    }, []);
 
     // File handling functions
     const handleDragOver = (e: React.DragEvent) => {
@@ -67,9 +83,7 @@ const ChatInterface = () => {
         setIsDragging(false);
 
         const droppedFiles = Array.from(e.dataTransfer.files);
-        for (const file of droppedFiles) {
-            await uploadFile(file);
-        }
+        droppedFiles.forEach(file => uploadFile(file, modelConfig));
     };
 
     const handleTitleSubmit = async (chatId: string) => {
@@ -107,9 +121,15 @@ const ChatInterface = () => {
 
         try {
             console.log("Attempting to send message...");
-            await sendMessage(inputText, modelConfig);
+            const currentInput = inputText;
+            setInputText(''); // Clear input before sending
+            await sendMessage(currentInput, modelConfig);
             console.log("Message sent successfully");
-            setInputText('');
+
+            // Use setTimeout to ensure focus happens after state updates
+            setTimeout(() => {
+                inputRef.current?.focus();
+            }, 0);
         } catch (error) {
             console.error("Error sending message:", error);
         }
@@ -133,6 +153,85 @@ const ChatInterface = () => {
         } catch (error) {
             console.error("Failed to create chat:", error);
         }
+    };
+
+    const MessageContent = ({ content }: { content: string }) => {
+        const [mainContent, references] = content.split('References:', 2);
+        const imageRegex = /\[IMAGE:(storage\/images\/[^|]+)\|([^|]*)\|([^\]]+)\]/g;
+        const images = Array.from(content.matchAll(imageRegex));
+        const cleanContent = mainContent.replace(imageRegex, '').trim();
+
+        let transformedReferences = references ? references.trim() : '';
+
+        if (transformedReferences) {
+            // Replace document links
+            transformedReferences = transformedReferences.replace(
+                /\[View Document\]\((.*?)\)/g,
+                (match, p1) =>
+                    `<a href="${p1}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700">[View Document]</a>`
+            );
+
+            // Replace image references
+            transformedReferences = transformedReferences.replace(
+                imageRegex,
+                (match, imagePath, altText) => {
+                    // Remove or replace newlines within altText with a space
+                    const sanitizedAltText = altText.replace(/\n+/g, ' ').trim();
+                    const imageUrl = `${process.env.NEXT_PUBLIC_API_URL}/${imagePath}`;
+                    const linkText = sanitizedAltText && sanitizedAltText !== ''
+                        ? sanitizedAltText
+                        : '[View Image]';
+                    return `<a href="${imageUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700">${linkText}</a>`;
+                }
+            );
+
+            // Collapse multiple newlines into one
+            transformedReferences = transformedReferences.replace(/\n{2,}/g, '\n');
+
+            // Convert single newlines to <br/>
+            transformedReferences = transformedReferences.replace(/\n/g, '<br/>');
+        }
+
+        return (
+            <>
+                <div className="whitespace-pre-wrap">{cleanContent}</div>
+
+                {images.length > 0 && (
+                    <div className="grid grid-cols-2 gap-4 my-4">
+                        {images.map((img, i) => (
+                            <div key={i} className="flex flex-col items-center">
+                                <a
+                                    href={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    <img
+                                        src={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
+                                        alt={img[2]}
+                                        className="rounded-lg shadow-md max-w-full h-auto"
+                                    />
+                                </a>
+                                {img[2] && (
+                                    <p className="text-sm text-gray-600 mt-2 text-center">
+                                        {img[2]}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {transformedReferences && (
+                    <div className="mt-4">
+                        <strong>References:</strong>
+                        <div
+                            className="whitespace-pre-wrap"
+                            dangerouslySetInnerHTML={{ __html: transformedReferences }}
+                        />
+                    </div>
+                )}
+            </>
+        );
     };
 
     return (
@@ -411,8 +510,9 @@ const ChatInterface = () => {
                                         type="file"
                                         className="hidden"
                                         onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file) uploadFile(file);
+                                            const files = Array.from(e.target.files || []);
+                                            // Now handle all files, not just the first one
+                                            files.forEach(file => uploadFile(file, modelConfig));
                                         }}
                                         multiple
                                     />
@@ -454,7 +554,9 @@ const ChatInterface = () => {
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col">
                 {/* Chat Messages */}
-                <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                <div ref={messagesContainerRef}
+                     className="flex-1 p-6 overflow-y-auto space-y-6"
+                >
                     {Array.isArray(messages) && messages.map((message, index) => (
                         <div
                             key={index}
@@ -467,7 +569,7 @@ const ChatInterface = () => {
                                         : 'bg-gray-100 text-gray-900'
                                 }`}
                             >
-                                <div className="whitespace-pre-wrap">{message.content}</div>
+                                <MessageContent content={message.content}/>
                                 <div className={`text-xs mt-2 ${
                                     message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                                 }`}>
@@ -498,6 +600,7 @@ const ChatInterface = () => {
                     )}
                     <div className="flex gap-2">
                         <Textarea
+                            ref={inputRef}
                             value={inputText}
                             onChange={(e) => {
                                 console.log("Input changed:", e.target.value);

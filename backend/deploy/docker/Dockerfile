@@ -1,51 +1,35 @@
-FROM python:3.11-slim AS python-base
-
-# Python configuration
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=off \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=1.7.1 \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_NO_INTERACTION=1 \
-    PYSETUP_PATH="/opt/pysetup" \
-    VENV_PATH="/opt/pysetup/.venv"
-
-# Add Poetry to PATH
-ENV PATH="$POETRY_HOME/bin:$VENV_PATH/bin:$PATH"
-
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        curl \
-        libmagic1 \
-        tesseract-ocr \
-        poppler-utils \
-        libreoffice \
-        netcat-traditional \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
+FROM python:3.10-slim
 
 # Set working directory
 WORKDIR /app
 
-# Copy start script first and make it executable
-COPY scripts/start.sh /app/scripts/
-RUN chmod +x /app/scripts/start.sh
+# Install system dependencies and poetry
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libpq-dev \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sSL https://install.python-poetry.org | python3 -
 
-# Copy project files
+# Add Poetry to PATH
+ENV PATH="${PATH}:/root/.local/bin"
+
+# Copy poetry files
 COPY pyproject.toml poetry.lock ./
-COPY app ./app
-COPY alembic.ini ./
-COPY alembic ./alembic
+
+# Configure poetry to not create a virtual environment
+RUN poetry config virtualenvs.create false
 
 # Install dependencies
-RUN poetry install --no-root --no-dev
+RUN poetry install --no-interaction --no-ansi
 
-# Set the default command
-CMD ["/app/scripts/start.sh"]
+# Copy application code
+COPY . .
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Command to run the application
+CMD ["poetry", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
