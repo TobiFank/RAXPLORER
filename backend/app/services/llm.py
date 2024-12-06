@@ -1,4 +1,5 @@
 # app/services/llm.py
+import asyncio
 import json
 import logging
 from typing import Protocol, AsyncGenerator, List
@@ -69,8 +70,16 @@ class ChatGPTProvider:
 
 
 class OllamaProvider:
+    def __init__(self):
+        self._loaded_models = set()
+        self._model_lock = asyncio.Lock()
+
     async def _ensure_model_exists(self, model_name: str, base_url: str) -> None:
         """Ensure model exists, pull if it doesn't"""
+        async with self._model_lock:
+            if model_name in self._loaded_models:
+                return
+
         try:
             async with httpx.AsyncClient() as client:
                 # Pull the model
@@ -100,6 +109,7 @@ class OllamaProvider:
                         status_code=verify_response.status_code,
                         detail=f"Model verification failed after pulling: {verify_response.text}"
                     )
+                self._loaded_models.add(model_name)
 
         except HTTPException:
             raise
