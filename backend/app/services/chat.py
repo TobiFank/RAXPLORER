@@ -7,7 +7,7 @@ from sqlalchemy import update
 from sqlalchemy.sql import select
 
 from .llm import LLMService
-from .rag import RAGService
+from .rag.rag import RAGService
 from ..db.models import ChatModel, FileModel
 from ..db.session import AsyncSession
 from ..schemas.chat import Chat
@@ -114,10 +114,15 @@ class ChatService:
                 "timestamp": datetime.utcnow().isoformat()
             })
 
-            # Store assistant message with enhanced metadata
+            formatted_response = rag_response.answer
+            for idx, img in enumerate(rag_response.images, 1):
+                formatted_response = formatted_response.replace(f"[Image {img.image_id}]", f"Figure {idx}")
+                formatted_response += f"\n[IMAGE:{img.file_path}|Figure {idx}: {img.caption}|{img.image_id}]\n"
+
+                # Store assistant message with enhanced metadata
             chat.messages.append({
                 "role": "assistant",
-                "content": rag_response.answer,
+                "content": formatted_response,
                 "timestamp": datetime.utcnow().isoformat(),
                 "metadata": {
                     "citations": [citation.dict() for citation in rag_response.citations],
@@ -135,16 +140,9 @@ class ChatService:
             )
             await self.db.commit()
 
-            # Stream the response with metadata as JSON
-            response_data = {
-                "answer": rag_response.answer,
-                "citations": [citation.dict() for citation in rag_response.citations],
-                "images": [image.dict() for image in rag_response.images],
-                "reasoning": rag_response.reasoning,
-                "confidence_score": rag_response.confidence_score
-            }
-            #yield json.dumps(response_data)
-            yield rag_response.answer
+            logger.debug(f"Response: {formatted_response}")
+
+            yield formatted_response
 
         except Exception as e:
             logger.error(f"Error in stream_response: {str(e)}")
@@ -162,7 +160,7 @@ class ChatService:
     2. Add relevant synonyms or related terms
     3. Make implicit subjects explicit
     4. Include contextual information from recent messages
-    5. Break compound questions into their core concepts
+    5. Break compound queries into their core concepts
     
     Keep the enhanced query focused and relevant. Don't add speculative content.
     Output only the enhanced query, nothing else."""
@@ -188,7 +186,7 @@ class ChatService:
         async for chunk in provider.generate([enhancement_prompt, user_prompt], model_config):
             enhanced_query += chunk
 
-        logger.info(f"Original query: {query}")
-        logger.info(f"Enhanced query: {enhanced_query}")
+        logger.debug(f"Original query: {query}")
+        logger.debug(f"Enhanced query: {enhanced_query}")
 
         return enhanced_query.strip()

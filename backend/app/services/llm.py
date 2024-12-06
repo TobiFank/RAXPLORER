@@ -1,7 +1,8 @@
 # app/services/llm.py
+import asyncio
 import json
 import logging
-from typing import Protocol, AsyncGenerator
+from typing import Protocol, AsyncGenerator, List
 
 import httpx
 from anthropic import AsyncAnthropic
@@ -20,6 +21,9 @@ class LLMProvider(Protocol):
     async def validate_config(self, config: ModelConfig) -> dict: ...
 
     async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]: ...
+
+    async def get_embeddings_batch(self, all_queries, model_config):
+        pass
 
 
 class ClaudeProvider:
@@ -46,10 +50,12 @@ class ClaudeProvider:
         )
         return response.embeddings[0]
 
+
 class ChatGPTProvider:
     async def generate(self, messages: list[dict], config: ModelConfig):
         client = AsyncOpenAI(api_key=config.apiKey)
-        response = await client.chat.completions.create(model=config.model, messages=messages, temperature=config.temperature, stream=True)
+        response = await client.chat.completions.create(model=config.model, messages=messages,
+                                                        temperature=config.temperature, stream=True)
         async for chunk in response:
             if chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
@@ -62,12 +68,101 @@ class ChatGPTProvider:
         )
         return response.data[0].embedding
 
+
 class OllamaProvider:
+    def __init__(self):
+        self._loaded_models = set()
+        self._model_lock = asyncio.Lock()
+
+    async def _ensure_model_exists(self, model_name: str, base_url: str) -> None:
+        """Ensure model exists, pull if it doesn't"""
+        async with self._model_lock:
+            if model_name in self._loaded_models:
+                return
+
+        try:
+            async with httpx.AsyncClient() as client:
+                # Pull the model
+                pull_response = await client.post(
+                    f"{base_url}/api/pull",
+                    json={"model": model_name, "stream": False},
+                    timeout=None
+                )
+
+                if not 200 <= pull_response.status_code < 300:
+                    raise HTTPException(
+                        status_code=pull_response.status_code,
+                        detail=f"Failed to pull model {model_name}: {pull_response.text}"
+                    )
+
+                logger.info(f"Successfully pulled model {model_name}")
+
+                # Verify model was pulled successfully
+                verify_response = await client.post(
+                    f"{base_url}/api/chat",
+                    json={"model": model_name, "messages": []},
+                    timeout=None
+                )
+
+                if not 200 <= verify_response.status_code < 300:
+                    raise HTTPException(
+                        status_code=verify_response.status_code,
+                        detail=f"Model verification failed after pulling: {verify_response.text}"
+                    )
+                self._loaded_models.add(model_name)
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error ensuring model exists: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def _ensure_embedding_model_exists(self, model_name: str, base_url: str) -> None:
+        """Ensure embedding model exists, pull if it doesn't"""
+        try:
+            async with httpx.AsyncClient() as client:
+                # Pull the model
+                pull_response = await client.post(
+                    f"{base_url}/api/pull",
+                    json={"model": model_name, "stream": False},
+                    timeout=None
+                )
+
+                if not 200 <= pull_response.status_code < 300:
+                    raise HTTPException(
+                        status_code=pull_response.status_code,
+                        detail=f"Failed to pull model {model_name}: {pull_response.text}"
+                    )
+
+                logger.info(f"Successfully pulled model {model_name}")
+
+                # Verify model with embeddings endpoint
+                verify_response = await client.post(
+                    f"{base_url}/api/embeddings",
+                    json={"model": model_name, "prompt": "test"},
+                    timeout=None
+                )
+
+                if not 200 <= verify_response.status_code < 300:
+                    raise HTTPException(
+                        status_code=verify_response.status_code,
+                        detail=f"Model verification failed after pulling: {verify_response.text}"
+                    )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error ensuring embedding model exists: {str(e)}")
+            raise HTTPException(status_code=500, detail=str(e))
+
     async def generate(self, messages: list[dict], config: ModelConfig):
         settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
-        logger.info(f"Sending formatted messages to Ollama: {messages}")
+        logger.debug(f"Sending formatted messages to Ollama: {messages}")
+
+        # Ensure model exists before trying to use it
+        await self._ensure_model_exists(config.model, base_url)
 
         async with httpx.AsyncClient() as client:
             try:
@@ -76,7 +171,10 @@ class OllamaProvider:
                     json={
                         "model": config.model,
                         "messages": messages,
-                        "stream": True
+                        "stream": True,
+                        "options": {
+                            "num_ctx": 8192
+                        }
                     },
                     timeout=None
                 )
@@ -102,6 +200,9 @@ class OllamaProvider:
         settings = Settings()
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
+        # Ensure embedding model exists
+        await self._ensure_embedding_model_exists(settings.OLLAMA_EMBEDDING_MODEL, base_url)
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -123,6 +224,43 @@ class OllamaProvider:
         except Exception as e:
             logger.error(f"Error getting embeddings from Ollama: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_embeddings_batch(self, texts: List[str], config: ModelConfig) -> List[List[float]]:
+        settings = Settings()
+        base_url = settings.OLLAMA_HOST or "http://ollama:11434"
+
+        # Load model only once
+        await self._ensure_embedding_model_exists(settings.OLLAMA_EMBEDDING_MODEL, base_url)
+
+        # Use a single client for all requests to reuse connection
+        async with httpx.AsyncClient() as client:
+            embeddings = []
+            for text in texts:
+                try:
+                    response = await client.post(
+                        f"{base_url}/api/embeddings",
+                        json={
+                            "model": settings.OLLAMA_EMBEDDING_MODEL,
+                            "prompt": text
+                        },
+                        timeout=None
+                    )
+
+                    if response.status_code != 200:
+                        logger.error(f"Ollama embeddings error: {response.status_code} - {response.text}")
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail=f"Ollama error: {response.text}"
+                        )
+
+                    data = response.json()
+                    embeddings.append(data["embedding"])
+
+                except Exception as e:
+                    logger.error(f"Error getting embedding for text: {str(e)}")
+                    raise HTTPException(status_code=500, detail=str(e))
+
+            return embeddings
 
 
 class LLMService:

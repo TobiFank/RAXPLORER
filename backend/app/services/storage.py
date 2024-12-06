@@ -9,7 +9,7 @@ import pymupdf
 from fastapi import UploadFile, HTTPException
 from sqlalchemy import select
 
-from .rag import RAGService
+from .rag.rag import RAGService
 from ..core.config import Settings
 from ..db.models import FileModel
 from ..db.session import AsyncSession
