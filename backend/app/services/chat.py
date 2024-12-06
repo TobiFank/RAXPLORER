@@ -115,8 +115,9 @@ class ChatService:
             })
 
             formatted_response = rag_response.answer
-            for img in rag_response.images:
-                formatted_response += f"\n[IMAGE:{img.file_path}|{img.caption}|{img.image_id}]\n"
+            for idx, img in enumerate(rag_response.images, 1):
+                formatted_response = formatted_response.replace(f"[Image {img.image_id}]", f"Figure {idx}")
+                formatted_response += f"\n[IMAGE:{img.file_path}|Figure {idx}: {img.caption}|{img.image_id}]\n"
 
                 # Store assistant message with enhanced metadata
             chat.messages.append({
@@ -138,6 +139,8 @@ class ChatService:
                 .values(messages=chat.messages)
             )
             await self.db.commit()
+
+            logger.debug(f"Response: {formatted_response}")
 
             yield formatted_response
 

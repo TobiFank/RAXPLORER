@@ -70,13 +70,13 @@ Images Available:
 Instructions:
 1. Answer the query using ONLY information from the provided context
 2. Use logical reasoning to connect information
-3. You MUST cite ALL sources using [Doc: ID, Page X] format IMMEDIATELY after each piece of information
-4. Reference relevant images using [Image X] format
+3. Cite ALL sources using [Doc: ID, Page X] format IMMEDIATELY after each piece of information
+4. When referencing images, use (Figure X) format where X matches the image caption
 5. Maintain high confidence in your answer
 6. Be explicit about which document each piece of information comes from
 
 Example citation format:
-"John works at ABC Corp [Doc: doc123, Page 1] and has 5 years of experience [Doc: doc456, Page 3]"
+"As shown in (Figure 1), John works at ABC Corp [Doc: doc123, Page 1] and has 5 years of experience [Doc: doc456, Page 3]"
 
 Answer in this structured format:
 Answer: [Your detailed answer with inline citations]
