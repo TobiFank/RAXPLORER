@@ -151,6 +151,16 @@ class ChromaProvider(VectorStoreProvider[Document]):
             # Convert basic metadata
             metadata = section.metadata.copy()
 
+            if 'images' in metadata:
+                try:
+                    # First ensure any existing JSON strings are parsed
+                    images_data = metadata['images'] if isinstance(metadata['images'], list) else json.loads(metadata['images'])
+                    # Then serialize the full list
+                    metadata['images'] = json.dumps(images_data)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to decode images metadata: {metadata['images']}")
+                    metadata['images'] = json.dumps([])
+
             # Add section type
             metadata['section_type'] = section.section_type.value if section.section_type else 'text'
 
@@ -163,26 +173,6 @@ class ChromaProvider(VectorStoreProvider[Document]):
                     'y1': section.bbox.y1,
                     'page_num': section.bbox.page_num
                 })
-
-            # Process images
-            if section.images:
-                metadata['images'] = json.dumps([
-                    {
-                        'page_num': img.page_num,
-                        'image_index': img.metadata.get('image_index'),
-                        'image_type': img.image_type,
-                        'caption': img.caption,
-                        'extension': img.metadata.get('extension', 'png'),
-                        'file_path': img.metadata.get('file_path'),
-                        'bbox': {
-                            'x0': img.bbox.x0,
-                            'y0': img.bbox.y0,
-                            'x1': img.bbox.x1,
-                            'y1': img.bbox.y1,
-                        }
-                    }
-                    for img in section.images
-                ])
 
             # Add nearby section references
             if section.nearby_sections:

@@ -166,65 +166,48 @@ class DocumentProcessor:
 
     def _associate_images(self, images: List[DocumentImage], sections: List[DocumentSection]):
         """Associate images with relevant sections using multiple strategies"""
+        # Inside _associate_images method, at the start
+        def add_image_metadata(section: DocumentSection, image: DocumentImage):
+            """Helper to avoid duplicate image associations"""
+            image_metadata = {
+                'page_num': image.page_num,
+                'image_index': image.metadata['image_index'],
+                'image_type': image.image_type,
+                'caption': image.caption,
+                'file_path': image.metadata['file_path'],
+                'bbox': image.bbox.__dict__
+            }
+
+            # Check if this exact image is already associated
+            if not any(img.get('image_index') == image_metadata['image_index'] and
+                       img.get('page_num') == image_metadata['page_num']
+                       for img in section.metadata.get('images', [])):
+                section.metadata.setdefault('images', []).append(image_metadata)
+                image.referenced_by.append(section.metadata['section_id'])
+
         for image in images:
             # Strategy 1: Direct spatial overlap
             for section in sections:
                 if section.overlaps_with(image.bbox):
-                    image_metadata = {
-                        'page_num': image.page_num,
-                        'image_index': image.metadata['image_index'],
-                        'image_type': image.image_type,
-                        'caption': image.caption,
-                        'file_path': image.metadata['file_path'],
-                        'bbox': image.bbox.__dict__
-                    }
-                    section.metadata['images'].append(image_metadata)
-                    image.referenced_by.append(section.metadata['section_id'])
+                    add_image_metadata(section, image)
 
             # Strategy 2: Caption proximity
             if image.caption:
                 for section in sections:
                     if section.is_nearby(image.bbox) and section.section_type == SectionType.CAPTION:
-                        image_metadata = {
-                            'page_num': image.page_num,
-                            'image_index': image.metadata['image_index'],
-                            'image_type': image.image_type,
-                            'caption': image.caption,
-                            'file_path': image.metadata['file_path'],
-                            'bbox': image.bbox.__dict__
-                        }
-                        section.metadata['images'].append(image_metadata)
-                        image.referenced_by.append(section.metadata['section_id'])
+                        add_image_metadata(section, image)
 
             # Strategy 3: Text references
             image_numbers = self._extract_all_image_numbers(image.caption) if image.caption else []
             if image_numbers:
                 for section in sections:
                     if any(self._contains_image_reference(section.content, num) for num in image_numbers):
-                        image_metadata = {
-                            'page_num': image.page_num,
-                            'image_index': image.metadata['image_index'],
-                            'image_type': image.image_type,
-                            'caption': image.caption,
-                            'file_path': image.metadata['file_path'],
-                            'bbox': image.bbox.__dict__
-                        }
-                        section.metadata['images'].append(image_metadata)
-                        image.referenced_by.append(section.metadata['section_id'])
+                        add_image_metadata(section, image)
 
             # Strategy 4: Context association
             for section in sections:
                 if section.is_nearby(image.bbox, distance_threshold=100):  # Larger threshold for context
-                    image_metadata = {
-                        'page_num': image.page_num,
-                        'image_index': image.metadata['image_index'],
-                        'image_type': image.image_type,
-                        'caption': image.caption,
-                        'file_path': image.metadata['file_path'],
-                        'bbox': image.bbox.__dict__
-                    }
-                    section.metadata['images'].append(image_metadata)
-                    image.referenced_by.append(section.metadata['section_id'])
+                    add_image_metadata(section, image)
 
     def _find_image_caption(self, page: fitz.Page, image_rect: fitz.Rect) -> str:
         caption_area = image_rect + (0, 0, 0, 50)  # Look 50 points below

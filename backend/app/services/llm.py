@@ -158,7 +158,10 @@ class OllamaProvider:
                     json={
                         "model": config.model,
                         "messages": messages,
-                        "stream": True
+                        "stream": True,
+                        "options": {
+                            "num_ctx": 8192
+                        }
                     },
                     timeout=None
                 )
