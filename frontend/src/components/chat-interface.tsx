@@ -12,7 +12,7 @@ import {Alert, AlertDescription, AlertTitle} from '@/components/ui/alert';
 import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
-import {MODEL_INFORMATION, Provider, Chat} from "@/lib/types";
+import {Chat, MODEL_INFORMATION, Provider} from "@/lib/types";
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -155,38 +155,64 @@ const ChatInterface = () => {
         }
     };
 
-    const MessageContent = ({ content }: { content: string }) => {
-        // Split the content into parts based on the references section
+    const MessageContent = ({content}: { content: string }) => {
+        // Split into main content and references
         const [mainContent, references] = content.split('References:', 2);
 
-        if (!references) {
-            return <div className="whitespace-pre-wrap">{content}</div>;
-        }
+        // Extract and remove image data
+        const imageRegex = /\[IMAGE:([^|]+)\|([^|]*)\|([^\]]+)\]/g;
+        const images = Array.from(mainContent.matchAll(imageRegex));
+        const cleanContent = mainContent.replace(imageRegex, '');
 
         return (
             <>
-                <div className="whitespace-pre-wrap">{mainContent}</div>
-                <div className="mt-4">
-                    <strong>References:</strong>
-                    <div className="whitespace-pre-wrap">
-                        {references.split('\n').map((ref, i) => {
-                            const match = ref.match(/\[View Document\]\((.*?)\)/);
-                            if (match) {
-                                const url = match[1];
-                                return (
-                                    <div key={i}>
-                                        {ref.replace(/\[View Document\]\(.*?\)/, '')}
-                                        <a href={url} target="_blank" rel="noopener noreferrer"
-                                           className="text-blue-500 hover:text-blue-700">
-                                            [View Document]
-                                        </a>
-                                    </div>
-                                );
-                            }
-                            return <div key={i}>{ref}</div>;
-                        })}
+                <div className="whitespace-pre-wrap">{cleanContent}</div>
+
+                {/* Images Grid */}
+                {images.length > 0 && (
+                    <div className="grid grid-cols-2 gap-4 my-4">
+                        {images.map((img, i) => (
+                            <div key={i} className="flex flex-col items-center">
+                                <img
+                                    src={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
+                                    alt={img[2]}
+                                    className="rounded-lg shadow-md max-w-full h-auto"
+                                />
+                                {img[2] && (
+                                    <p className="text-sm text-gray-600 mt-2 text-center">
+                                        {img[2]}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
                     </div>
-                </div>
+                )}
+
+                {/* References Section */}
+                {references && (
+                    <div className="mt-4">
+                        <strong>References:</strong>
+                        <div className="whitespace-pre-wrap">
+                            {references.split('\n').map((ref, i) => {
+                                const match = ref.match(/\[View Document\]\((.*?)\)/);
+                                if (match) {
+                                    return (
+                                        <div key={i}>
+                                            {ref.replace(/\[View Document\]\(.*?\)/, '')}
+                                            <a href={match[1]}
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               className="text-blue-500 hover:text-blue-700">
+                                                [View Document]
+                                            </a>
+                                        </div>
+                                    );
+                                }
+                                return <div key={i}>{ref}</div>;
+                            })}
+                        </div>
+                    </div>
+                )}
             </>
         );
     };
@@ -526,7 +552,7 @@ const ChatInterface = () => {
                                         : 'bg-gray-100 text-gray-900'
                                 }`}
                             >
-                                <MessageContent content={message.content} />
+                                <MessageContent content={message.content}/>
                                 <div className={`text-xs mt-2 ${
                                     message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
                                 }`}>

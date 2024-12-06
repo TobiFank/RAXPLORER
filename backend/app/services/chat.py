@@ -114,10 +114,14 @@ class ChatService:
                 "timestamp": datetime.utcnow().isoformat()
             })
 
-            # Store assistant message with enhanced metadata
+            formatted_response = rag_response.answer
+            for img in rag_response.images:
+                formatted_response += f"\n[IMAGE:{img.file_path}|{img.caption}|{img.image_id}]\n"
+
+                # Store assistant message with enhanced metadata
             chat.messages.append({
                 "role": "assistant",
-                "content": rag_response.answer,
+                "content": formatted_response,
                 "timestamp": datetime.utcnow().isoformat(),
                 "metadata": {
                     "citations": [citation.dict() for citation in rag_response.citations],
@@ -135,16 +139,7 @@ class ChatService:
             )
             await self.db.commit()
 
-            # Stream the response with metadata as JSON
-            response_data = {
-                "answer": rag_response.answer,
-                "citations": [citation.dict() for citation in rag_response.citations],
-                "images": [image.dict() for image in rag_response.images],
-                "reasoning": rag_response.reasoning,
-                "confidence_score": rag_response.confidence_score
-            }
-            #yield json.dumps(response_data)
-            yield rag_response.answer
+            yield formatted_response
 
         except Exception as e:
             logger.error(f"Error in stream_response: {str(e)}")
