@@ -243,7 +243,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
 
         return documents
 
-    async def delete_collection(self, vector_store_id: str):
+    async def delete_collection(self, file_id: str):
         """Delete all collections associated with a specific vector store ID"""
         # Since we store embeddings for each provider separately,
         # we need to delete from all provider collections
@@ -252,7 +252,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
             try:
                 # Delete all documents with matching vector_store_id
                 results = collection.get(
-                    where={"document_id": vector_store_id}
+                    where={"document_id": file_id}
                 )
                 if results and results['ids']:
                     collection.delete(

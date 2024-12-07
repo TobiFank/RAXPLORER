@@ -123,7 +123,7 @@ class StorageService:
                 # Clean up vector store
                 if file.vector_store_id:
                     try:
-                        await self.rag.chroma_provider.delete_collection(file.vector_store_id)
+                        await self.rag.chroma_provider.delete_collection(file_id)
                     except Exception as e:
                         # If vector store deletion fails, we should probably fail the whole operation
                         logger.error(f"Failed to delete vector store {file.vector_store_id}: {e}")
