@@ -27,10 +27,31 @@ export function useFiles() {
 
     const uploadFile = async (file: File, modelConfig: ModelConfig) => {
         try {
+            // Create temporary file metadata
+            const tempId = crypto.randomUUID();
+            const tempFile: FileMetadata = {
+                id: tempId,
+                name: file.name,
+                size: `${(file.size / 1024).toFixed(1)}KB`,
+                pages: 0,
+                uploadedAt: new Date().toISOString(),
+                status: 'processing'
+            };
+
+            // Add to files immediately
+            setFiles(prev => [...prev, tempFile]);
+
+            // Process file
             setIsLoading(true);
             const uploadedFile = await fileApi.uploadFile(file, modelConfig);
-            setFiles(prev => [...prev, uploadedFile]);
+
+            // Update with processed file
+            setFiles(prev => prev.map(f =>
+                f.id === tempId ? {...uploadedFile, status: 'complete'} : f
+            ));
         } catch (err) {
+            // Remove temp file on error
+            setFiles(prev => prev.filter(f => f.id !== tempId));
             setError('Failed to upload file');
             console.error(err);
         } finally {

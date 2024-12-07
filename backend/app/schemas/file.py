@@ -8,3 +8,4 @@ class FileMetadata(BaseModel):
     size: str
     pages: int
     uploaded_at: datetime
+    status: str = 'processing'

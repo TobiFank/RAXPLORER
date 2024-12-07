@@ -532,19 +532,26 @@ const ChatInterface = () => {
                                 className="p-3 bg-gray-50 rounded-lg flex items-start justify-between group"
                             >
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{file.name}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-sm font-medium truncate">{file.name}</p>
+                                        {file.status === 'processing' && (
+                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600" />
+                                        )}
+                                    </div>
                                     <p className="text-xs text-gray-500">
-                                        {file.size} • {file.pages} pages
+                                        {file.size} {file.status !== 'processing' && `• ${file.pages} pages`}
                                     </p>
                                 </div>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => deleteFile(file.id)}
-                                >
-                                    <Trash2 size={14}/>
-                                </Button>
+                                {file.status !== 'processing' && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => deleteFile(file.id)}
+                                    >
+                                        <Trash2 size={14} />
+                                    </Button>
+                                )}
                             </div>
                         ))}
                     </div>

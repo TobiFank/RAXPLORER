@@ -62,7 +62,8 @@ class StorageService:
                 pages=pages,
                 vector_store_id=str(uuid4()),
                 embedding_provider=model_config.provider,
-                file_path=str(pdf_path)
+                file_path=str(pdf_path),
+                status='processing'
             )
 
             # Process through RAG
@@ -71,6 +72,8 @@ class StorageService:
                 file_model,
                 model_config
             )
+
+            file_model.status = 'complete'
 
             # Save to database
             self.db.add(file_model)

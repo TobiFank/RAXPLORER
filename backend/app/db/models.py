@@ -24,6 +24,7 @@ class FileModel(Base):
     uploaded_at = Column(DateTime, server_default=func.now())
     embedding_provider = Column(String, nullable=False)
     file_path = Column(String, nullable=True)
+    status = Column(String, nullable=False, default='processing')
 
 class ModelConfigModel(Base):
     __tablename__ = "model_configs"

@@ -45,6 +45,7 @@ export interface FileMetadata {
     size: string;
     pages: number;
     uploadedAt: string;
+    status?: 'processing' | 'complete';
 }
 
 export interface EditState {
