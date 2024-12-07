@@ -421,7 +421,7 @@ const ChatInterface = () => {
                             </div>
 
                             {/* Temperature Setting */}
-                            <div className="space-y-2">
+                            {/*<div className="space-y-2">
                                 <label className="text-sm font-medium">Temperature</label>
                                 <div className="flex items-center gap-4">
                                     <input
@@ -442,8 +442,10 @@ const ChatInterface = () => {
                                 <p className="text-xs text-gray-500">
                                     Controls randomness: 0 is focused, 2 is more creative
                                 </p>
-                            </div>
-                            <div className="space-y-2">
+                            </div>*/}
+
+                            {/* System Message */}
+                            {/*<div className="space-y-2">
                                 <label className="text-sm font-medium">System Message</label>
                                 <Textarea
                                     placeholder="Optional: Enter a system message to set the behavior of the AI"
@@ -457,7 +459,7 @@ const ChatInterface = () => {
                                 <p className="text-xs text-gray-500">
                                     Define the AI&apos;s behavior and context for this model
                                 </p>
-                            </div>
+                            </div>*/}
 
                             {/* Save Button */}
                             <Button
