@@ -50,6 +50,22 @@ class ClaudeProvider:
         )
         return response.embeddings[0]
 
+    async def get_embeddings_batch(self, texts: List[str], config: ModelConfig) -> List[List[float]]:
+        client = AsyncAnthropic(api_key=config.apiKey)
+        # Claude has a max batch size of 100
+        batch_size = 100
+        all_embeddings = []
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            response = await client.embeddings.create(
+                model="claude-3-embedding-v1",
+                input=batch
+            )
+            all_embeddings.extend(response.embeddings)
+
+        return all_embeddings
+
 
 class ChatGPTProvider:
     async def generate(self, messages: list[dict], config: ModelConfig):
@@ -67,6 +83,22 @@ class ChatGPTProvider:
             input=text
         )
         return response.data[0].embedding
+
+    async def get_embeddings_batch(self, texts: List[str], config: ModelConfig) -> List[List[float]]:
+        client = AsyncOpenAI(api_key=config.apiKey)
+        # OpenAI has a max batch size of 2048
+        batch_size = 2048
+        all_embeddings = []
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            response = await client.embeddings.create(
+                model="text-embedding-3-small",
+                input=batch
+            )
+            all_embeddings.extend([item.embedding for item in response.data])
+
+        return all_embeddings
 
 
 class OllamaProvider:

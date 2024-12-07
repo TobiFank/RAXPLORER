@@ -628,11 +628,28 @@ class RAGService:
 
     async def _generate_embeddings(self, sections: List[DocumentSection],
                                    provider_service, provider_config) -> List[List[float]]:
-        embeddings = []
-        for section in sections:
-            embedding = await provider_service.get_embeddings(section.content, provider_config)
-            embeddings.append(embedding)
-        return embeddings
+        # Extract all texts first
+        texts = [section.content for section in sections]
+
+        # Default batch size - can be moved to settings if needed
+        batch_size = 50
+
+        try:
+            # Check if provider supports batch processing
+            if hasattr(provider_service, 'get_embeddings_batch'):
+                return await provider_service.get_embeddings_batch(texts, provider_config)
+            else:
+                # Fallback to non-batch processing
+                logger.warning("Provider doesn't support batch processing, falling back to single processing")
+                embeddings = []
+                for section in sections:
+                    embedding = await provider_service.get_embeddings(section.content, provider_config)
+                    embeddings.append(embedding)
+                return embeddings
+
+        except Exception as e:
+            logger.error(f"Error generating embeddings: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {str(e)}")
 
     async def _cleanup_on_error(self, file_id: str):
         try:
