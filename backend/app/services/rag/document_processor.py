@@ -19,8 +19,10 @@ class DocumentProcessor:
 
     def __init__(self):
         self.image_pattern = re.compile(
-            r'(?i)(?:figure|fig\.|image|img|picture|pic\.|diagram|chart|graph|illustration)[\s.-]*(\d+(?:\.\d+)?)|' +
-            r'\[(?:figure|fig\.|image|img|picture|pic\.|diagram|chart|graph|illustration)[\s.-]*(\d+(?:\.\d+)?)\]'
+            r'(?i)(?:figure|fig\.|image|img|picture|pic\.|diagram|chart|graph|illustration|' +
+            r'abbildung|abb\.|bild|diagramm|grafik|schaubild|tabelle|tab\.|darstellung|illustration|ill\.)[\s.-]*(\d+(?:\.\d+)?)|' +
+            r'\[(?:figure|fig\.|image|img|picture|pic\.|diagram|chart|graph|illustration|' +
+            r'abbildung|abb\.|bild|diagramm|grafik|schaubild|tabelle|tab\.|darstellung|illustration|ill\.)[\s.-]*(\d+(?:\.\d+)?)\]'
         )
         self.node_parser = HierarchicalNodeParser.from_defaults(
             chunk_sizes=[2048, 1024, 512],
@@ -229,9 +231,9 @@ class DocumentProcessor:
             return SectionType.IMAGE.value
 
         caption_lower = caption.lower()
-        if "table" in caption_lower:
+        if "table" in caption_lower or "tabelle" in caption_lower:
             return SectionType.TABLE.value
-        elif any(term in caption_lower for term in ["figure", "fig.", "diagram"]):
+        elif any(term in caption_lower for term in ["figure", "fig.", "diagram", "abbildung", "abb.", "diagramm", "grafik", "schaubild"]):
             return SectionType.IMAGE.value
 
         return SectionType.IMAGE.value
@@ -239,7 +241,7 @@ class DocumentProcessor:
     def _determine_section_type(self, node: BaseNode) -> SectionType:
         text = node.text.lower().strip()
 
-        if any(text.startswith(h) for h in ['#', 'chapter', 'section']):
+        if any(text.startswith(h) for h in ['#', 'chapter', 'section', 'kapitel', 'abschnitt', 'teil']):
             return SectionType.HEADING
         elif text.startswith(('•', '-', '*')) or bool(re.match(r'^\d+\.', text)):
             return SectionType.LIST
