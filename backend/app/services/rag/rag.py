@@ -191,26 +191,22 @@ class RAGService:
 
             provider = await self.llm_service.get_provider(model_config)
 
-            # 1. Run analysis tasks in parallel and collect full responses
-            analysis_messages = [{"role": "user", "content": self.query_analysis_prompt.format(query=query)}]
-            step_back_messages = [{"role": "user", "content": self.step_back_prompt.format(query=query)}]
-
-            analysis_response = ""
-            step_back_response = ""
-
-            # Execute both LLM calls in parallel
+            # 1. Run analysis tasks in parallel
             async def run_llm(messages):
                 response = ""
                 async for chunk in provider.generate(messages, model_config):
                     response += chunk
                 return response
 
+            analysis_messages = [{"role": "user", "content": self.query_analysis_prompt.format(query=query)}]
+            step_back_messages = [{"role": "user", "content": self.step_back_prompt.format(query=query)}]
+
             analysis_response, step_back_response = await asyncio.gather(
                 run_llm(analysis_messages),
                 run_llm(step_back_messages)
             )
 
-            # 2. Parse results with proper validation
+            # 2. Parse results with validation
             try:
                 query_analysis = self.query_analyzer.parse(analysis_response)
                 broader_query = step_back_response.strip()
@@ -226,30 +222,34 @@ class RAGService:
                 )
                 broader_query = query
 
-            # 3. Batch embedding generation for all queries
+            # 3. Prepare all queries for embedding
             all_queries = [
                 query,  # Original query first
                 broader_query,  # Step-back query second
                 *[sq.query for sq in query_analysis.sub_queries]  # Sub-queries last
             ]
 
-            all_embeddings = await provider.get_embeddings_batch(all_queries, model_config)
+            # 4. Run embeddings generation and sparse search preparation in parallel
+            async def get_embeddings():
+                return await provider.get_embeddings_batch(all_queries, model_config)
 
-            # 4. Run searches in parallel
-            async def run_dense_search():
-                return await self.chroma_provider.query_batch(
-                    provider=model_config.provider,
-                    query_embeddings=all_embeddings,
-                    top_k=5
-                )
+            def prepare_sparse_search():  # Remove async, this is CPU-bound work
+                return [self._sparse_search(q) for q in all_queries]
 
-            # Run sparse search in parallel with dense search
-            dense_results, sparse_results = await asyncio.gather(
-                run_dense_search(),
-                asyncio.to_thread(lambda: [self._sparse_search(q) for q in all_queries])
+            # Run embedding generation and sparse search prep in parallel
+            embeddings, sparse_results = await asyncio.gather(
+                get_embeddings(),
+                asyncio.to_thread(prepare_sparse_search)  # Now correctly runs CPU-bound function in thread
             )
 
-            # 5. Combine results maintaining query alignment
+            # 5. Run dense search
+            dense_results = await self.chroma_provider.query_batch(
+                provider=model_config.provider,
+                query_embeddings=embeddings,
+                top_k=5
+            )
+
+            # 6. Combine results maintaining query alignment
             all_results = []
             for query_idx in range(len(all_queries)):
                 dense_batch = dense_results[query_idx] if query_idx < len(dense_results) else []
@@ -257,10 +257,10 @@ class RAGService:
                 combined = self._reciprocal_rank_fusion(dense_batch, sparse_batch)
                 all_results.extend(combined)
 
-            # 6. Deduplicate while preserving most relevant results
+            # 7. Deduplicate while preserving most relevant results
             final_results = self._deduplicate_results(all_results)[:20]
 
-            # 7. Generate final answer
+            # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)
 
         except Exception as e:
