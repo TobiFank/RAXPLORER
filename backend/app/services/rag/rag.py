@@ -1,4 +1,5 @@
 # app/services/rag.py
+import asyncio
 import logging
 import os
 import re
@@ -185,70 +186,101 @@ class RAGService:
     async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:
         """Execute a RAG query and generate an answer"""
         try:
-
-            # If no documents, fall back to direct LLM response
             if not file_ids:
-                provider = await self.llm_service.get_provider(model_config)
+                return await self._handle_no_documents(query, model_config)
 
-                prompt = f"Please provide a response to this query: {query}\n\nNote: Respond directly, mentioning that you don't have any specific documents or context to refer to, but use your model knowledge instead."
+            provider = await self.llm_service.get_provider(model_config)
 
-                messages = [{"role": "user", "content": prompt}]
+            # 1. Run analysis tasks in parallel
+            async def run_llm(messages):
                 response = ""
                 async for chunk in provider.generate(messages, model_config):
                     response += chunk
+                return response
 
-                return RAGResponse(
-                    answer=response,
-                    citations=[],
-                    images=[],
-                    reasoning="Direct response without document context",
-                    confidence_score=0.7  # Lower confidence since no source documents
+            analysis_messages = [{"role": "user", "content": self.query_analysis_prompt.format(query=query)}]
+            step_back_messages = [{"role": "user", "content": self.step_back_prompt.format(query=query)}]
+
+            analysis_response, step_back_response = await asyncio.gather(
+                run_llm(analysis_messages),
+                run_llm(step_back_messages)
+            )
+
+            # 2. Parse results with validation
+            try:
+                query_analysis = self.query_analyzer.parse(analysis_response)
+                broader_query = step_back_response.strip()
+
+                if not query_analysis.sub_queries:
+                    logger.warning("No sub-queries generated, using original query")
+                    query_analysis.sub_queries = [SubQuery(query=query, reasoning="Original query")]
+            except Exception as e:
+                logger.error(f"Failed to parse query analysis: {e}")
+                query_analysis = QueryAnalysis(
+                    main_intent="Direct query processing",
+                    sub_queries=[SubQuery(query=query, reasoning="Fallback to original query")]
                 )
+                broader_query = query
 
-            # 1. First get all queries we need
-            query_analysis = await self._analyze_query(query, model_config)
-            logger.debug(f"Query analysis: {query_analysis}")
-            broader_query = await self._generate_step_back_query(query, model_config)
-            logger.debug(f"Step-back query: {broader_query}")
-
-            # Collect all queries that need embeddings
+            # 3. Prepare all queries for embedding
             all_queries = [
-                query,                                    # Original query
-                broader_query,                           # Step-back query
-                *[sq.query for sq in query_analysis.sub_queries]  # Sub-queries
+                query,  # Original query first
+                broader_query,  # Step-back query second
+                *[sq.query for sq in query_analysis.sub_queries]  # Sub-queries last
             ]
-            logger.debug(f"All queries: {all_queries}")
 
-            # 2. Get embeddings for all queries in one batch
-            provider = await self.llm_service.get_provider(model_config)
-            all_embeddings = await provider.get_embeddings_batch(all_queries, model_config)
+            # 4. Run embeddings generation and sparse search preparation in parallel
+            async def get_embeddings():
+                return await provider.get_embeddings_batch(all_queries, model_config)
 
-            # 3. Process all search results in batch
+            def prepare_sparse_search():  # Remove async, this is CPU-bound work
+                return [self._sparse_search(q) for q in all_queries]
+
+            # Run embedding generation and sparse search prep in parallel
+            embeddings, sparse_results = await asyncio.gather(
+                get_embeddings(),
+                asyncio.to_thread(prepare_sparse_search)  # Now correctly runs CPU-bound function in thread
+            )
+
+            # 5. Run dense search
             dense_results = await self.chroma_provider.query_batch(
                 provider=model_config.provider,
-                query_embeddings=all_embeddings,
+                query_embeddings=embeddings,
                 top_k=5
             )
 
-            # Get sparse results for each query
-            sparse_results = [self._sparse_search(q) for q in all_queries]
-
-            # 4. Combine results for each query
+            # 6. Combine results maintaining query alignment
             all_results = []
-            for dense_batch, sparse_batch in zip(dense_results, sparse_results):
+            for query_idx in range(len(all_queries)):
+                dense_batch = dense_results[query_idx] if query_idx < len(dense_results) else []
+                sparse_batch = sparse_results[query_idx] if query_idx < len(sparse_results) else []
                 combined = self._reciprocal_rank_fusion(dense_batch, sparse_batch)
                 all_results.extend(combined)
 
-            # 5. Deduplicate and rank final results
-            final_results = self._deduplicate_results(all_results)[:20]  # Top 20 unique results
+            # 7. Deduplicate while preserving most relevant results
+            final_results = self._deduplicate_results(all_results)[:20]
 
-            # 6. Generate answer with citations and images
+            # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)
-
 
         except Exception as e:
             logger.error(f"Query execution failed: {str(e)}")
             raise
+
+    async def _handle_no_documents(self, query: str, model_config: ModelConfig) -> RAGResponse:
+        provider = await self.llm_service.get_provider(model_config)
+        response = ""
+        messages = [{"role": "user", "content": f"Please provide a response to this query: {query}\n\nNote: No specific documents available."}]
+        async for chunk in provider.generate(messages, model_config):
+            response += chunk
+
+        return RAGResponse(
+            answer=response,
+            citations=[],
+            images=[],
+            reasoning="Direct response without document context",
+            confidence_score=0.7
+        )
 
     async def _analyze_query(self, query: str, model_config: ModelConfig) -> QueryAnalysis:
         """Analyze and decompose the query"""
