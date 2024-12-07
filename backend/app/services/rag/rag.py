@@ -116,7 +116,7 @@ class RAGService:
             with open(temp_pdf_path, 'wb') as f:
                 f.write(file_content)
 
-            file_id = file_model.vector_store_id
+            file_id = file_model.id
             original_filename = file_model.name
             logger.info(f"Processing document {original_filename}")
 

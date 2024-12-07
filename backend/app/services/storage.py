@@ -1,8 +1,6 @@
 # app/services/storage.py
 import logging
-import os
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
 import pymupdf
@@ -133,8 +131,20 @@ class StorageService:
 
                 image_dir = Path("storage/images")
                 if image_dir.exists():
-                    for image_file in image_dir.glob(f"{file_id}_*"):
-                        image_file.unlink(missing_ok=True)
+                    all_files = list(image_dir.iterdir())
+                    logger.debug(f"Total files in image directory: {len(all_files)}")
+                    logger.debug(f"Files in directory: {[f.name for f in all_files]}")
+                    logger.debug(f"Searching for pattern: {file_id}_*")
+                    images_found = list(image_dir.glob(f"{file_id}_*"))
+                    logger.debug(f"Found {len(images_found)} images to delete")
+                    for image_file in images_found:
+                        try:
+                            image_file.unlink()
+                            logger.debug(f"Deleted image: {image_file}")
+                        except Exception as e:
+                            logger.error(f"Failed to delete image {image_file}: {e}")
+                else:
+                    logger.warning(f"Image directory does not exist: {image_dir.absolute()}")
 
                 # Remove database record
                 await self.db.delete(file)
