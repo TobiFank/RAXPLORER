@@ -107,7 +107,8 @@ class StorageService:
                 name=f.name,
                 size=f.size,
                 pages=f.pages,
-                uploaded_at=f.uploaded_at
+                uploaded_at=f.uploaded_at,
+                status=f.status
             ) for f in files
         ]
 

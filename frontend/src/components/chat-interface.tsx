@@ -344,7 +344,7 @@ const ChatInterface = () => {
                                     <SelectValue placeholder="Select Provider"/>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="claude">Claude</SelectItem>
+                                    {/*<SelectItem value="claude">Claude</SelectItem>*/}
                                     <SelectItem value="chatgpt">ChatGPT</SelectItem>
                                     <SelectItem value="ollama">Ollama (Local)</SelectItem>
                                 </SelectContent>
