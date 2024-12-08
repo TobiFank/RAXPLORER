@@ -16,6 +16,3 @@ class Settings(BaseSettings):
 
     # Ollama
     OLLAMA_HOST: str = "http://ollama:11434"
-
-    class Config:
-        env_file = ".env"
