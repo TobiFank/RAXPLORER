@@ -20,7 +20,6 @@ class FileModel(Base):
     name = Column(String, nullable=False)
     size = Column(String, nullable=False)
     pages = Column(Integer, nullable=False)
-    vector_store_id = Column(String, nullable=False)
     uploaded_at = Column(DateTime, server_default=func.now())
     embedding_provider = Column(String, nullable=False)
     file_path = Column(String, nullable=True)

@@ -250,7 +250,7 @@ class ChromaProvider(VectorStoreProvider[Document]):
         for provider in Provider:
             collection = self.get_collection(provider)
             try:
-                # Delete all documents with matching vector_store_id
+                # Delete all documents with matching file_id
                 results = collection.get(
                     where={"document_id": file_id}
                 )

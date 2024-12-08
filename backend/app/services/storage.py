@@ -60,7 +60,6 @@ class StorageService:
                 name=file.filename,
                 size=f"{len(content) / 1024:.1f}KB",
                 pages=pages,
-                vector_store_id=str(uuid4()),
                 embedding_provider=model_config.provider,
                 file_path=str(pdf_path),
                 status='processing'
@@ -122,16 +121,16 @@ class StorageService:
                     Path(file.file_path).unlink(missing_ok=True)
 
                 # Clean up vector store
-                if file.vector_store_id:
-                    try:
-                        await self.rag.chroma_provider.delete_collection(file_id)
-                    except Exception as e:
-                        # If vector store deletion fails, we should probably fail the whole operation
-                        logger.error(f"Failed to delete vector store {file.vector_store_id}: {e}")
-                        raise HTTPException(
-                            status_code=500,
-                            detail=f"Failed to clean up document data: {str(e)}"
-                        )
+                try:
+                    logger.debug(f"Deleting vector store {file_id}")
+                    await self.rag.chroma_provider.delete_collection(file_id)
+                except Exception as e:
+                    # If vector store deletion fails, we should probably fail the whole operation
+                    logger.error(f"Failed to delete vector store {file_id}: {e}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to clean up document data: {str(e)}"
+                    )
 
                 image_dir = Path("storage/images")
                 if image_dir.exists():

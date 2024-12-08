@@ -102,7 +102,7 @@ class ChatService:
             # Get RAG response
             rag_response: RAGResponse = await self.rag.query(
                 content,
-                [f.vector_store_id for f in files],
+                [f.id for f in files],
                 model_config,
                 self.db
             )
