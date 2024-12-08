@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
+    <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background -->
+        <rect width="800" height="400" fill="#ffffff"/>
+
+        <!-- Document Understanding -->
+        <rect x="50" y="50" width="240" height="300" fill="#f8f9fa" stroke="#666" rx="5"/>
+        <text x="70" y="80" font-family="Arial" font-size="14" font-weight="bold">Enhanced Context Understanding</text>
+
+        <!-- Document elements -->
+        <rect x="70" y="100" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="85" y="130" font-family="Arial" font-size="12">Spatial Layout Analysis</text>
+        <text x="85" y="145" font-family="Arial" font-size="10" fill="#666">Text and image positioning</text>
+
+        <rect x="70" y="170" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="85" y="200" font-family="Arial" font-size="12">Visual Element Processing</text>
+        <text x="85" y="215" font-family="Arial" font-size="10" fill="#666">Images, tables, diagrams</text>
+
+        <rect x="70" y="240" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="85" y="270" font-family="Arial" font-size="12">Hierarchical Text Analysis</text>
+        <text x="85" y="285" font-family="Arial" font-size="10" fill="#666">Structure-aware chunking</text>
+
+        <!-- Intelligent Retrieval -->
+        <rect x="320" y="50" width="240" height="300" fill="#f8f9fa" stroke="#666" rx="5"/>
+        <text x="340" y="80" font-family="Arial" font-size="14" font-weight="bold">Intelligent Retrieval</text>
+
+        <rect x="340" y="100" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="355" y="130" font-family="Arial" font-size="12">Multi-Stage Query Processing</text>
+        <text x="355" y="145" font-family="Arial" font-size="10" fill="#666">Query decomposition &amp; expansion</text>
+
+        <rect x="340" y="170" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="355" y="200" font-family="Arial" font-size="12">Hybrid Search</text>
+        <text x="355" y="215" font-family="Arial" font-size="10" fill="#666">Dense + sparse retrieval fusion</text>
+
+        <rect x="340" y="240" width="200" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="355" y="270" font-family="Arial" font-size="12">Context Assembly</text>
+        <text x="355" y="285" font-family="Arial" font-size="10" fill="#666">Smart information synthesis</text>
+
+        <!-- Response Generation -->
+        <rect x="590" y="50" width="160" height="300" fill="#f8f9fa" stroke="#666" rx="5"/>
+        <text x="610" y="80" font-family="Arial" font-size="14" font-weight="bold">Enhanced Response</text>
+
+        <rect x="610" y="100" width="120" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="625" y="130" font-family="Arial" font-size="12">Visual Integration</text>
+        <text x="625" y="145" font-family="Arial" font-size="10" fill="#666">Relevant images</text>
+
+        <rect x="610" y="170" width="120" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="625" y="200" font-family="Arial" font-size="12">Source Tracking</text>
+        <text x="625" y="215" font-family="Arial" font-size="10" fill="#666">Precise citations</text>
+
+        <rect x="610" y="240" width="120" height="60" fill="#fff" stroke="#666" rx="3"/>
+        <text x="625" y="270" font-family="Arial" font-size="12">Quality Control</text>
+        <text x="625" y="285" font-family="Arial" font-size="10" fill="#666">Confidence scoring</text>
+
+        <!-- Connecting arrows -->
+        <path d="M290 200 L320 200" stroke="#666" fill="none" marker-end="url(#arrow)"/>
+        <path d="M560 200 L590 200" stroke="#666" fill="none" marker-end="url(#arrow)"/>
+
+        <!-- Arrow marker definition -->
+        <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <path d="M0,2 L8,5 L0,8" fill="none" stroke="#666"/>
+            </marker>
+        </defs>
+    </svg>
+</svg>
