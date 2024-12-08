@@ -13,13 +13,13 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
 from .document_processor import DocumentProcessor
+from .prompts import QUERY_ANALYSIS_PROMPT, STEP_BACK_PROMPT, ANSWER_GENERATION_PROMPT, NO_DOCUMENT_PROVIDED
 from .rag_dependencies import (
     ChromaProvider, BM25Retriever, DocumentSection
 )
 from ..llm import LLMService
 from ...core.config import Settings
 from ...db.models import FileModel
-from ...schemas import file
 from ...schemas.model import ModelConfig, Provider
 from ...schemas.rag import RAGResponse, ImageReference, Citation
 
@@ -36,59 +36,6 @@ class QueryAnalysis(BaseModel):
     """Model for query analysis output"""
     main_intent: str = Field(description="The main intent of the query")
     sub_queries: List[SubQuery] = Field(description="List of sub-queries to answer")
-
-
-QUERY_ANALYSIS_PROMPT = """Analyze this query and break it down into sub-queries.
-Main Query: {query}
-
-Please respond with a JSON object that contains:
-1. A "main_intent" field with a string describing the core purpose of the query
-2. A "sub_queries" array containing objects with "queries" and "reasoning" fields
-
-Example response format:
-{{"main_intent": "understand what the user means by X", "sub_queries": [{{"query": "what is X?", "reasoning": "need to clarify the basic concept"}}]}}
-
-Remember: Respond ONLY with the JSON object, no other text or schema information.
-
-Query to analyze: {query}"""
-
-STEP_BACK_PROMPT = """Before directly answering the query, let's take a step back and think about the broader context.
-Query: {query}
-
-What broader topics or concepts should we consider to provide a more comprehensive answer?
-Focus on generating a more general query that will help retrieve relevant context."""
-
-ANSWER_GENERATION_PROMPT = """Given the following context and query, provide a comprehensive answer. Use the context carefully and cite your sources.
-
-Context:
-{context}
-
-Query: {query}
-
-Images Available:
-{images}
-
-Instructions:
-1. Answer the query using ONLY information from the provided context
-2. Use logical reasoning to connect information
-3. Cite ALL sources using [Doc: ID, Page X] format IMMEDIATELY after each piece of information
-4. When referencing images, use (Figure X) format where X matches the image caption
-5. Maintain high confidence in your answer
-6. Be explicit about which document each piece of information comes from
-
-Example citation format:
-"As shown in (Figure 1), John works at ABC Corp [Doc: doc123, Page 1] and has 5 years of experience [Doc: doc456, Page 3]"
-
-Answer in this structured format:
-Answer: [Your detailed answer with inline citations]
-Reasoning: [Your step-by-step reasoning process]
-Confidence: [Score between 0-1 based on context relevance]
-
-If any of the retrieved chunks have associated images that would help explain the concept, 
-include a reference to them in your answer using [Image X] notation. For example:
-- When explaining a diagram: "As we can see in [Image 1], the process flows from..."
-- When an image provides evidence: "The document shows this clearly in [Image 2]"
-Only reference images that are directly relevant to answering the query."""
 
 
 class RAGService:
@@ -258,7 +205,7 @@ class RAGService:
                 all_results.extend(combined)
 
             # 7. Deduplicate while preserving most relevant results
-            final_results = self._deduplicate_results(all_results)[:20]
+            final_results = self._deduplicate_results(all_results)[:10]
 
             # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)
@@ -270,7 +217,8 @@ class RAGService:
     async def _handle_no_documents(self, query: str, model_config: ModelConfig) -> RAGResponse:
         provider = await self.llm_service.get_provider(model_config)
         response = ""
-        messages = [{"role": "user", "content": f"Please provide a response to this query: {query}\n\nNote: No specific documents available."}]
+        messages = [{"role": "user",
+                     "content": NO_DOCUMENT_PROVIDED.format(query=query)}]
         async for chunk in provider.generate(messages, model_config):
             response += chunk
 
@@ -501,7 +449,7 @@ class RAGService:
     def _format_image_references(self, images: List[ImageReference]) -> str:
         """Format image references for the LLM prompt"""
         return "\n".join(
-            f"[Image {img.image_id}] - {img.image_type.capitalize()} on page {img.page_number}" +
+            f"[Bild {img.image_id}] - {img.image_type.capitalize()} auf Seite {img.page_number}" +
             (f" - {img.caption}" if img.caption else "")
             for img in images
         )
@@ -611,7 +559,7 @@ class RAGService:
 
             if citation:
                 # Use the friendly name for display
-                ref_text = f"[{number}] {citation.document_name}, Page {page}"
+                ref_text = f"[{number}] {citation.document_name}, Seite {page}"
                 if citation.file_path:
                     api_url = "http://localhost:8000"  # Or get from settings if you prefer
                     web_path = f"{api_url}/storage/documents/{os.path.basename(citation.file_path)}"
@@ -624,7 +572,7 @@ class RAGService:
 
         # Track referenced images
         referenced_image_ids = []
-        image_pattern = r'\[Image ([^\]]+)\]'
+        image_pattern = r'\[Bild ([^\]]+)\]'
         for match in re.finditer(image_pattern, processed_text):
             # Groups: [1]=file_path, [2]=caption, [3]=image_id
             image_id = match.group(1)

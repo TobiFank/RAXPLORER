@@ -55,7 +55,7 @@ class DocumentProcessor:
                                 x1=b["bbox"][2], y1=b["bbox"][3],
                                 page_num=page_num
                             )
-                            text_with_layout += f"[Page {page_num + 1}]\n{text}\n"
+                            text_with_layout += f"[Seite {page_num + 1}]\n{text}\n"
 
             # Create LlamaIndex document
             doc = Document(text=text_with_layout)
@@ -68,7 +68,7 @@ class DocumentProcessor:
             sections = []
             for node in leaf_nodes:
                 # Get spatial info from metadata
-                page_match = re.search(r'\[Page (\d+)\]', node.text)
+                page_match = re.search(r'\[Seite (\d+)\]', node.text)
                 page_num = int(page_match.group(1)) - 1 if page_match else 0
                 logger.info(f"Processing node with text start: {node.text[:100]}...")
                 logger.info(f"Extracted page number: {page_num + 1}")
