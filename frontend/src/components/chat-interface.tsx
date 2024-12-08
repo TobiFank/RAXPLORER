@@ -500,7 +500,7 @@ const ChatInterface = () => {
                             </div>
 
                             {/* Temperature Setting */}
-                            {/*<div className="space-y-2">
+                            <div className="space-y-2">
                                 <label className="text-sm font-medium">Temperature</label>
                                 <div className="flex items-center gap-4">
                                     <input
@@ -521,7 +521,7 @@ const ChatInterface = () => {
                                 <p className="text-xs text-gray-500">
                                     Controls randomness: 0 is focused, 2 is more creative
                                 </p>
-                            </div>*/}
+                            </div>
 
                             {/* System Message */}
                             {/*<div className="space-y-2">
