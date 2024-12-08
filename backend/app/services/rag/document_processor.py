@@ -25,7 +25,7 @@ class DocumentProcessor:
             r'abbildung|abb\.|bild|diagramm|grafik|schaubild|tabelle|tab\.|darstellung|illustration|ill\.)[\s.-]*(\d+(?:\.\d+)?)\]'
         )
         self.node_parser = HierarchicalNodeParser.from_defaults(
-            chunk_sizes=[2048, 1024, 512],
+            chunk_sizes=[1536, 768, 384],
             chunk_overlap=20,
             include_metadata=True,
             include_prev_next_rel=True
