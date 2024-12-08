@@ -155,7 +155,7 @@ const ChatInterface = () => {
         }
     };
 
-    const MessageContent = ({ content }: { content: string }) => {
+    const MessageContent = ({content}: { content: string }) => {
         const [mainContent, references] = content.split('References:', 2);
         const imageRegex = /\[IMAGE:(storage\/images\/[^|]+)\|([^|]*)\|([^\]]+)\]/g;
         const images = Array.from(content.matchAll(imageRegex));
@@ -226,7 +226,7 @@ const ChatInterface = () => {
                         <strong>References:</strong>
                         <div
                             className="whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{ __html: transformedReferences }}
+                            dangerouslySetInnerHTML={{__html: transformedReferences}}
                         />
                     </div>
                 )}
@@ -324,10 +324,17 @@ const ChatInterface = () => {
                                 <Settings size={16}/>
                                 <CardTitle className="text-sm">Model Settings</CardTitle>
                             </div>
-                            <ChevronDown
-                                size={16}
-                                className={`transition-transform ${isSettingsExpanded ? 'rotate-180' : ''}`}
-                            />
+                            <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">
+                    {MODEL_INFORMATION[modelConfig.provider].models.length > 0
+                        ? MODEL_INFORMATION[modelConfig.provider].models.find(([value]) => value === modelConfig.model)?.[1]
+                        : modelConfig.model || 'Not configured'}
+                </span>
+                                <ChevronDown
+                                    size={16}
+                                    className={`transition-transform ${isSettingsExpanded ? 'rotate-180' : ''}`}
+                                />
+                            </div>
                         </div>
                     </CardHeader>
 
@@ -384,7 +391,7 @@ const ChatInterface = () => {
                                             })}
                                         />
                                         <p className="text-xs text-gray-500 flex items-center gap-1">
-                                            <Link2 className="h-3 w-3" />
+                                            <Link2 className="h-3 w-3"/>
                                             <a href="https://ollama.com/search"
                                                target="_blank"
                                                rel="noopener noreferrer"
@@ -563,7 +570,8 @@ const ChatInterface = () => {
                                     <div className="flex items-center gap-2">
                                         <p className="text-sm font-medium truncate">{file.name}</p>
                                         {file.status === 'processing' && (
-                                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600" />
+                                            <div
+                                                className="animate-spin rounded-full h-4 w-4 border-2 border-gray-300 border-t-blue-600"/>
                                         )}
                                     </div>
                                     <p className="text-xs text-gray-500">
@@ -577,7 +585,7 @@ const ChatInterface = () => {
                                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={() => deleteFile(file.id)}
                                     >
-                                        <Trash2 size={14} />
+                                        <Trash2 size={14}/>
                                     </Button>
                                 )}
                             </div>
