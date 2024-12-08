@@ -36,35 +36,33 @@ const CONFIG_STORAGE_KEY = 'modelConfig';
 const INITIAL_PROVIDER = 'ollama';
 
 export function useModelConfig() {
-    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    return parsed.configs || defaultConfigs;
-                } catch (e) {
-                    console.error('Failed to parse stored config:', e);
-                }
-            }
-        }
-        return defaultConfigs;
-    });
+    const [configs, setConfigs] = useState<Record<Provider, ModelConfig>>(defaultConfigs);
 
-    const [activeProvider, setActiveProvider] = useState<Provider>(() => {
-        if (typeof window !== 'undefined') {
-            const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    return parsed.activeProvider || INITIAL_PROVIDER;
-                } catch (e) {
-                    console.error('Failed to parse stored config:', e);
-                }
+    useEffect(() => {
+        const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                setConfigs(parsed.configs || defaultConfigs);
+            } catch (e) {
+                console.error('Failed to parse stored config:', e);
             }
         }
-        return INITIAL_PROVIDER;
-    });
+    }, []);
+
+    const [activeProvider, setActiveProvider] = useState<Provider>(INITIAL_PROVIDER);
+
+    useEffect(() => {
+        const saved = window.localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                setActiveProvider(parsed.activeProvider || INITIAL_PROVIDER);
+            } catch (e) {
+                console.error('Failed to parse stored config:', e);
+            }
+        }
+    }, []);
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<ModelConfigError | null>(null);

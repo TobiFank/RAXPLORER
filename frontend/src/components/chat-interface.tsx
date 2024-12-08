@@ -13,6 +13,7 @@ import {useChat} from "@/lib/hooks/useChat";
 import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
 import {Chat, MODEL_INFORMATION, Provider} from "@/lib/types";
+import Image from 'next/image';
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -205,10 +206,12 @@ const ChatInterface = () => {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                 >
-                                    <img
+                                    <Image
                                         src={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
                                         alt={img[2]}
                                         className="rounded-lg shadow-md max-w-full h-auto"
+                                        width={500}
+                                        height={300}
                                     />
                                 </a>
                                 {img[2] && (

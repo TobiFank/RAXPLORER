@@ -135,7 +135,6 @@ export function useChat() {
             // Get streaming response using the guaranteed chat ID
             console.log('Getting stream from API');
             const stream = chatApi.sendMessage(chatId, content, modelConfig);
-            let assistantMessage = '';
 
             // Create placeholder for assistant message
             const assistantPlaceholder: ChatMessage = {
