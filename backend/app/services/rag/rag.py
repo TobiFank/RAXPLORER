@@ -460,7 +460,8 @@ class RAGService:
 
         # First look for explicit citations in the format [Doc: X, Page Y]
         import re
-        citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
+        # pattern Doc or Dok, Page or Seite
+        citation_pattern = r'\[(Doc|Dok): ([^,]+), (Page|Seite) (\d+)\]'
         explicit_citations = re.finditer(citation_pattern, response)
 
         # Create a map of document_id -> chunk for easier lookup
@@ -471,8 +472,8 @@ class RAGService:
 
         # Process explicit citations
         for match in explicit_citations:
-            doc_id = match.group(1)
-            page_num = int(match.group(2))
+            doc_id = match.group(2)
+            page_num = int(match.group(4))
 
             if doc_id in chunk_map:
                 chunk = chunk_map[doc_id]
@@ -529,14 +530,14 @@ class RAGService:
         current_citation = 1
 
         # Find all citation patterns and replace with numbers
-        citation_pattern = r'\[Doc: ([^,]+), Page (\d+)\]'
+        citation_pattern = r'\[(Doc|Dok): ([^,]+), (Page|Seite) (\d+)\]'
         matches = list(re.finditer(citation_pattern, response))
 
         logger.debug(f"Found citation matches: {matches}")
 
         for match in matches:
-            doc_id = match.group(1)  # This is the UUID
-            page = int(match.group(2))
+            doc_id = match.group(2)  # This is the UUID
+            page = int(match.group(4))
             key = (doc_id, page)
 
             if key not in citation_map:
@@ -572,10 +573,11 @@ class RAGService:
 
         # Track referenced images
         referenced_image_ids = []
-        image_pattern = r'\[Bild ([^\]]+)\]'
+        # Bild or Image
+        image_pattern = r'\[(Bild|Image) ([^\]]+)\]'
         for match in re.finditer(image_pattern, processed_text):
             # Groups: [1]=file_path, [2]=caption, [3]=image_id
-            image_id = match.group(1)
+            image_id = match.group(2)
             referenced_image_ids.append(image_id)
         logger.debug(f"Found image IDs in text: {referenced_image_ids}")
         logger.debug(f"Built references text: {references_text}")
@@ -614,9 +616,6 @@ class RAGService:
                                    provider_service, provider_config) -> List[List[float]]:
         # Extract all texts first
         texts = [section.content for section in sections]
-
-        # Default batch size - can be moved to settings if needed
-        batch_size = 50
 
         try:
             # Check if provider supports batch processing

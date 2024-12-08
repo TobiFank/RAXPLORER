@@ -10,7 +10,7 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
         provider: 'claude',
         model: MODEL_INFORMATION.claude.defaultModel,
         embeddingModel: MODEL_INFORMATION.claude.defaultEmbedding,
-        temperature: 0.7,
+        temperature: 0.3,
         apiKey: '',
         systemMessage: '',
     },
@@ -18,7 +18,7 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
         provider: 'chatgpt',
         model: MODEL_INFORMATION.chatgpt.defaultModel,
         embeddingModel: MODEL_INFORMATION.chatgpt.defaultEmbedding,
-        temperature: 0.7,
+        temperature: 0.3,
         apiKey: '',
         systemMessage: '',
     },
@@ -26,7 +26,7 @@ const defaultConfigs: Record<Provider, ModelConfig> = {
         provider: 'ollama',
         model: MODEL_INFORMATION.ollama.defaultModel,
         embeddingModel: MODEL_INFORMATION.ollama.defaultEmbedding,
-        temperature: 0.7,
+        temperature: 0.3,
         systemMessage: '',
     }
 };
