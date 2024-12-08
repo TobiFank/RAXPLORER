@@ -2,7 +2,7 @@
 
 A sophisticated platform for developing and analyzing RAG (Retrieval-Augmented Generation) implementations. Built with a focus on multi-modal document understanding, this tool combines advanced document processing, intelligent retrieval strategies, and comparative analysis across different LLM providers.
 
-<picture>
+<div align="center">
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400">
     <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
 <!-- Background -->
@@ -69,7 +69,7 @@ A sophisticated platform for developing and analyzing RAG (Retrieval-Augmented G
   </defs>
 </svg>
   </svg>
-</picture>
+</div>
 
 ## Key Features
 
