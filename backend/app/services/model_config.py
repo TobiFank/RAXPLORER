@@ -18,6 +18,7 @@ class ModelConfigService:
         config_dict = {
             "provider": config.provider,
             "model": config.model,
+            "embedding_model": config.embeddingModel,
             "temperature": config.temperature,
             "system_message": config.systemMessage,
             "api_key": config.apiKey
@@ -39,6 +40,7 @@ class ModelConfigService:
         return [ModelConfig(
             provider=config.provider,
             model=config.model,
+            embeddingModel=config.embedding_model,
             temperature=config.temperature,
             systemMessage=config.system_message,
             apiKey=config.api_key

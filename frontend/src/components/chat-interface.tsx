@@ -2,7 +2,7 @@
 // src/components/chat-interface.tsx
 
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ChevronDown, FileText, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
+import {ChevronDown, FileText, Link2, Pencil, Plus, Send, Settings, Trash2} from 'lucide-react';
 import {Card, CardContent, CardHeader, CardTitle} from '@/components/ui/card';
 import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
@@ -375,13 +375,24 @@ const ChatInterface = () => {
                             <div className="space-y-2">
                                 <label className="text-sm font-medium">Model</label>
                                 {modelConfig.provider === 'ollama' ? (
-                                    <Input
-                                        placeholder="e.g., llama2, mistral, codellama"
-                                        value={modelConfig.model || ''}
-                                        onChange={(e) => updateDraft({
-                                            model: e.target.value
-                                        })}
-                                    />
+                                    <div className="space-y-2">
+                                        <Input
+                                            placeholder="e.g., llama2, mistral, codellama"
+                                            value={modelConfig.model || ''}
+                                            onChange={(e) => updateDraft({
+                                                model: e.target.value
+                                            })}
+                                        />
+                                        <p className="text-xs text-gray-500 flex items-center gap-1">
+                                            <Link2 className="h-3 w-3" />
+                                            <a href="https://ollama.com/search"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               className="text-blue-500 hover:underline">
+                                                Browse available models
+                                            </a>
+                                        </p>
+                                    </div>
                                 ) : (
                                     <Select
                                         value={modelConfig.model}
@@ -393,30 +404,45 @@ const ChatInterface = () => {
                                             <SelectValue placeholder="Select Model"/>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {modelConfig.provider === 'claude' ? (
-                                                <>
-                                                    {MODEL_INFORMATION.claude.models.map(([value, label]) => (
-                                                        <SelectItem key={value} value={value}>
-                                                            {label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {MODEL_INFORMATION.chatgpt.models.map(([value, label]) => (
-                                                        <SelectItem key={value} value={value}>
-                                                            {label}
-                                                        </SelectItem>
-                                                    ))}
-                                                </>
-                                            )}
+                                            {MODEL_INFORMATION[modelConfig.provider].models.map(([value, label]) => (
+                                                <SelectItem key={value} value={value}>
+                                                    {label}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
                                 )}
-                                {modelConfig.provider === 'ollama' && (
-                                    <p className="text-xs text-gray-500">
-                                        Enter the name of your locally installed Ollama model
-                                    </p>
+                            </div>
+
+                            {/* Embedding Model Selection */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium">Embedding Model</label>
+                                {modelConfig.provider === 'ollama' ? (
+                                    <Input
+                                        placeholder="e.g., nomic-embed-text"
+                                        value={modelConfig.embeddingModel || ''}
+                                        onChange={(e) => updateDraft({
+                                            embeddingModel: e.target.value
+                                        })}
+                                    />
+                                ) : (
+                                    <Select
+                                        value={modelConfig.embeddingModel}
+                                        onValueChange={(value) => updateDraft({
+                                            embeddingModel: value
+                                        })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Embedding Model"/>
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {MODEL_INFORMATION[modelConfig.provider].embeddingModels.map(([value, label]) => (
+                                                <SelectItem key={value} value={value}>
+                                                    {label}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 )}
                             </div>
 

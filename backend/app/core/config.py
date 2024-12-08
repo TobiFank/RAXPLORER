@@ -14,12 +14,8 @@ class Settings(BaseSettings):
     # API
     API_V1_PREFIX: str = "/api/v1"
 
-    # Reraanking
-    RERANKING_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
     # Ollama
     OLLAMA_HOST: str = "http://ollama:11434"
-    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
 
     class Config:
         env_file = ".env"

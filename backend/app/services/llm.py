@@ -79,7 +79,7 @@ class ChatGPTProvider:
     async def get_embeddings(self, text: str, config: ModelConfig) -> list[float]:
         client = AsyncOpenAI(api_key=config.apiKey)
         response = await client.embeddings.create(
-            model="text-embedding-3-small",
+            model=config.embeddingModel,
             input=text
         )
         return response.data[0].embedding
@@ -93,7 +93,7 @@ class ChatGPTProvider:
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
             response = await client.embeddings.create(
-                model="text-embedding-3-small",
+                model=config.embeddingModel,
                 input=batch
             )
             all_embeddings.extend([item.embedding for item in response.data])
@@ -233,14 +233,14 @@ class OllamaProvider:
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
         # Ensure embedding model exists
-        await self._ensure_embedding_model_exists(settings.OLLAMA_EMBEDDING_MODEL, base_url)
+        await self._ensure_embedding_model_exists(config.embeddingModel, base_url)
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{base_url}/api/embeddings",
                     json={
-                        "model": settings.OLLAMA_EMBEDDING_MODEL,
+                        "model": config.embeddingModel,
                         "prompt": text
                     },
                     timeout=None
@@ -262,7 +262,7 @@ class OllamaProvider:
         base_url = settings.OLLAMA_HOST or "http://ollama:11434"
 
         # Load model only once
-        await self._ensure_embedding_model_exists(settings.OLLAMA_EMBEDDING_MODEL, base_url)
+        await self._ensure_embedding_model_exists(config.embeddingModel, base_url)
 
         # Use a single client for all requests to reuse connection
         async with httpx.AsyncClient() as client:
@@ -272,7 +272,7 @@ class OllamaProvider:
                     response = await client.post(
                         f"{base_url}/api/embeddings",
                         json={
-                            "model": settings.OLLAMA_EMBEDDING_MODEL,
+                            "model": config.embeddingModel,
                             "prompt": text
                         },
                         timeout=None

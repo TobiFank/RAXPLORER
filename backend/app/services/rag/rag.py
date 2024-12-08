@@ -646,6 +646,7 @@ class RAGService:
         return ModelConfig(
             provider=provider,
             model=base_config.model,
+            embeddingModel=base_config.embeddingModel,
             temperature=base_config.temperature,
             systemMessage=base_config.systemMessage,
             apiKey=base_config.apiKey
