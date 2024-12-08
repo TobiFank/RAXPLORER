@@ -31,6 +31,7 @@ class StorageService:
 
     async def upload(self, file: UploadFile, model_config: ModelConfig) -> FileMetadata:
         try:
+            logger.debug(f"Model config: {model_config}")
             logger.info(f"Uploading file {file.filename}")
             content = await file.read()
             logger.info(f"File size: {len(content) / 1024:.1f}KB")

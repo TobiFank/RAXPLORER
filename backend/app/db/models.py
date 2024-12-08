@@ -30,6 +30,7 @@ class ModelConfigModel(Base):
 
     provider = Column(String, primary_key=True)
     model = Column(String, nullable=False)
+    embedding_model = Column(String, nullable=False)
     temperature = Column(Float, nullable=False)
     system_message = Column(String)
     api_key = Column(String)

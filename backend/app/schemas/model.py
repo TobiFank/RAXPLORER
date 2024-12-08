@@ -13,6 +13,7 @@ class Provider(str, Enum):
 class ModelConfig(BaseModel):
     provider: Provider
     model: str
+    embeddingModel: str
     temperature: float = Field(ge=0, le=2)
     systemMessage: str | None
     apiKey: str | None = None

@@ -2,26 +2,12 @@
 
 export type Provider = 'claude' | 'chatgpt' | 'ollama';
 
-// These types are for frontend validation only
-export type ClaudeModel =
-    | 'claude-3-opus-20240229'
-    | 'claude-3-sonnet-20240229'
-    | 'claude-3-haiku-20240307'
-    | 'claude-3-5-sonnet-20241022'
-    | 'claude-3-5-haiku-20241022';
-
-export type ChatGPTModel =
-    | 'gpt-4o'
-    | 'gpt-4o-mini'
-    | 'gpt-4-turbo'
-    | 'gpt-4-0125-preview'
-    | 'gpt-3.5-turbo-0125';
-
 // Matches current backend expectation
 export interface ModelConfig {
     provider: Provider;
     apiKey?: string;
-    model: string;  // Keeping as string for backend compatibility
+    model: string;
+    embeddingModel: string;
     temperature: number;
     systemMessage?: string;
 }
@@ -68,20 +54,31 @@ export const MODEL_INFORMATION = {
             ['claude-3-haiku-20240307', 'Claude 3 Haiku'],
             ['claude-3-5-sonnet-20241022', 'Claude 3.5 Sonnet'],
             ['claude-3-5-haiku-20241022', 'Claude 3.5 Haiku']
+        ] as const,
+        embeddingModels: [
+            ['SOME_CLAUDE_EMBEDDING', 'Claude Embedding'],
         ] as const
     },
     chatgpt: {
-        defaultModel: 'gpt-4o',
+        defaultModel: 'gpt-3.5-turbo-0125',
+        defaultEmbedding: 'text-embedding-3-small',
         models: [
             ['gpt-4o', 'GPT-4 Omni'],
             ['gpt-4o-mini', 'GPT-4 Omni Mini'],
             ['gpt-4-turbo', 'GPT-4 Turbo'],
             ['gpt-4-0125-preview', 'GPT-4 Turbo Preview'],
             ['gpt-3.5-turbo-0125', 'GPT-3.5 Turbo']
+        ] as const,
+        embeddingModels: [
+            ['text-embedding-3-large', 'text-embedding-3-large (3,072d)'],
+            ['text-embedding-3-small', 'text-embedding-3-small (1,536d)'],
+            ['text-embedding-ada-002', 'text-embedding-ada-002 (1,536d)']
         ] as const
     },
     ollama: {
-        defaultModel: '',
-        models: [] as const
+        defaultModel: 'llama3.1',
+        defaultEmbedding: 'nomic-embed-text',
+        models: [] as const,
+        embeddingModels: [] as const
     }
 } as const;

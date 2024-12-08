@@ -27,6 +27,7 @@ export function useFiles() {
 
     const uploadFile = async (file: File, modelConfig: ModelConfig) => {
         try {
+            console.log("Uploading with config:", modelConfig);
             // Create temporary file metadata
             const tempId = crypto.randomUUID();
             const tempFile: FileMetadata = {
