@@ -294,3 +294,15 @@ This project is licensed under a Custom Non-Commercial License. See [LICENSE](LI
 - The open-source community for various supporting libraries
 - All contributors who have helped improve this project
 
+## Support My Work
+
+If you find EchoQuest useful and want to help me keep developing innovative, open-source tools, consider supporting me by buying me a token. Your support helps cover development costs and allows me to create more projects like this!
+
+[Buy me a token!](https://buymeacoffee.com/TobiFank)
+
+Or, scan the QR code below to contribute:
+
+![Buy me a token QR Code](images/buymeatokenqr.png)
+
+Thank you for your support! It truly makes a difference.
+
