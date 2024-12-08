@@ -14,6 +14,7 @@ import {useFiles} from "@/lib/hooks/useFiles";
 import {useModelConfig} from "@/lib/hooks/useModelConfig";
 import {Chat, MODEL_INFORMATION, Provider} from "@/lib/types";
 import Image from 'next/image';
+import ContentViewer from '@/components/ui/content-viewer';
 
 const ChatInterface = () => {
     // Custom hooks for real functionality
@@ -156,7 +157,25 @@ const ChatInterface = () => {
         }
     };
 
-    const MessageContent = ({content}: { content: string }) => {
+    const MessageContent = ({ content }: { content: string }) => {
+        const [viewerOpen, setViewerOpen] = useState(false);
+        const [viewerContent, setViewerContent] = useState<{
+            url: string;
+            type: 'image' | 'document';
+            title: string;
+        } | null>(null);
+
+        const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string, title: string) => {
+            e.preventDefault();
+            const isImage = url.match(/\.(jpg|jpeg|png|gif|svg)$/i);
+            setViewerContent({
+                url,
+                type: isImage ? 'image' : 'document',
+                title: title || 'View Content'
+            });
+            setViewerOpen(true);
+        };
+
         const [mainContent, references] = content.split('References:', 2);
         const imageRegex = /\[IMAGE:(storage\/images\/[^|]+)\|([^|]*)\|([^\]]+)\]/g;
         const images = Array.from(content.matchAll(imageRegex));
@@ -169,27 +188,23 @@ const ChatInterface = () => {
             transformedReferences = transformedReferences.replace(
                 /\[View Document\]\((.*?)\)/g,
                 (match, p1) =>
-                    `<a href="${p1}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700">[View Document]</a>`
+                    `<a href="${p1}" class="text-blue-500 hover:text-blue-700" onclick="return false">[View Document]</a>`
             );
 
             // Replace image references
             transformedReferences = transformedReferences.replace(
                 imageRegex,
                 (match, imagePath, altText) => {
-                    // Remove or replace newlines within altText with a space
                     const sanitizedAltText = altText.replace(/\n+/g, ' ').trim();
                     const imageUrl = `${process.env.NEXT_PUBLIC_API_URL}/${imagePath}`;
                     const linkText = sanitizedAltText && sanitizedAltText !== ''
                         ? sanitizedAltText
                         : '[View Image]';
-                    return `<a href="${imageUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-500 hover:text-blue-700">${linkText}</a>`;
+                    return `<a href="${imageUrl}" class="text-blue-500 hover:text-blue-700" onclick="return false">${linkText}</a>`;
                 }
             );
 
-            // Collapse multiple newlines into one
             transformedReferences = transformedReferences.replace(/\n{2,}/g, '\n');
-
-            // Convert single newlines to <br/>
             transformedReferences = transformedReferences.replace(/\n/g, '<br/>');
         }
 
@@ -201,10 +216,16 @@ const ChatInterface = () => {
                     <div className="grid grid-cols-2 gap-4 my-4">
                         {images.map((img, i) => (
                             <div key={i} className="flex flex-col items-center">
-                                <a
-                                    href={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                <div
+                                    className="cursor-pointer"
+                                    onClick={() => {
+                                        setViewerContent({
+                                            url: `${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`,
+                                            type: 'image',
+                                            title: img[2] || 'Image'
+                                        });
+                                        setViewerOpen(true);
+                                    }}
                                 >
                                     <Image
                                         src={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
@@ -213,7 +234,7 @@ const ChatInterface = () => {
                                         width={500}
                                         height={300}
                                     />
-                                </a>
+                                </div>
                                 {img[2] && (
                                     <p className="text-sm text-gray-600 mt-2 text-center">
                                         {img[2]}
@@ -229,9 +250,33 @@ const ChatInterface = () => {
                         <strong>References:</strong>
                         <div
                             className="whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{__html: transformedReferences}}
+                            dangerouslySetInnerHTML={{ __html: transformedReferences }}
+                            onClick={(e) => {
+                                const target = e.target as HTMLElement;
+                                if (target.tagName === 'A') {
+                                    e.preventDefault();
+                                    const url = target.getAttribute('href');
+                                    const title = target.textContent || 'View Content';
+                                    if (url) {
+                                        handleLinkClick(e as any, url, title);
+                                    }
+                                }
+                            }}
                         />
                     </div>
+                )}
+
+                {viewerContent && (
+                    <ContentViewer
+                        isOpen={viewerOpen}
+                        onClose={() => {
+                            setViewerOpen(false);
+                            setViewerContent(null);
+                        }}
+                        url={viewerContent.url}
+                        type={viewerContent.type}
+                        title={viewerContent.title}
+                    />
                 )}
             </>
         );
