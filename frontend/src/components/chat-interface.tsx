@@ -227,12 +227,10 @@ const ChatInterface = () => {
                                         setViewerOpen(true);
                                     }}
                                 >
-                                    <Image
+                                    <img
                                         src={`${process.env.NEXT_PUBLIC_API_URL}/${img[1]}`}
                                         alt={img[2]}
                                         className="rounded-lg shadow-md max-w-full h-auto"
-                                        width={500}
-                                        height={300}
                                     />
                                 </div>
                                 {img[2] && (

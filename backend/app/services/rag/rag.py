@@ -384,6 +384,7 @@ class RAGService:
         """Generate a complete answer with citations and images"""
         # Extract images associated with retrieved chunks
         images = self._extract_images_from_chunks(retrieved_chunks)
+        logger.debug(f"Found images: {images}")
 
         # Merge sequential chunks if they're from the same page/section
         merged_chunks = self._merge_sequential_chunks(retrieved_chunks)
@@ -430,6 +431,7 @@ class RAGService:
         final_answer = processed_text + references_text
 
         referenced_images = [img for img in images if img.image_id in referenced_image_ids]
+        logger.debug(f"Creating RAGResponse with images: {referenced_images}")
 
         logger.debug(f"Final answer: {final_answer}")
 
@@ -624,9 +626,10 @@ class RAGService:
         referenced_image_ids = []
         image_pattern = r'\[Image ([^\]]+)\]'
         for match in re.finditer(image_pattern, processed_text):
+            # Groups: [1]=file_path, [2]=caption, [3]=image_id
             image_id = match.group(1)
             referenced_image_ids.append(image_id)
-
+        logger.debug(f"Found image IDs in text: {referenced_image_ids}")
         logger.debug(f"Built references text: {references_text}")
 
         return processed_text, references_text, referenced_image_ids
