@@ -205,16 +205,17 @@ class RAGService:
                 top_k=5
             )
 
-            # 6. Combine results maintaining query alignment
-            all_results = []
-            for query_idx in range(len(all_queries)):
-                dense_batch = dense_results[query_idx] if query_idx < len(dense_results) else []
-                sparse_batch = sparse_results[query_idx] if query_idx < len(sparse_results) else []
-                combined = self._reciprocal_rank_fusion(dense_batch, sparse_batch)
-                all_results.extend(combined)
+            # 6. Prepare ALL result lists for RRF
+            all_result_lists = [
+                results for results in (
+                    *dense_results,     # Unpack all dense results
+                    *sparse_results     # Unpack all sparse results
+                )
+                if results  # Filter out empty results
+            ]
 
-            # 7. Deduplicate while preserving most relevant results
-            final_results = self._deduplicate_results(all_results)[:10]
+            # 7. Apply RRF once to all result lists
+            final_results = self._reciprocal_rank_fusion(all_result_lists)[:10]  # Take top 10
 
             # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)
@@ -293,31 +294,40 @@ class RAGService:
 
     def _reciprocal_rank_fusion(
             self,
-            dense_results: List[Document],
-            sparse_results: List[Document],  # Updated type
+            all_results: List[List[Document]],  # List of result lists (dense and sparse from all queries)
             k: int = 60
     ) -> List[Document]:
-        """Combine dense and sparse results using RRF"""
-        # Create a map for scoring
+        """
+        Combine multiple ranked lists using Reciprocal Rank Fusion
+
+        Args:
+            all_results: List of result lists, where each inner list is a ranked list of Documents
+            k: Constant to avoid high impact of high rankings (default 60)
+
+        Returns:
+            Combined and reranked list of Documents
+        """
         doc_scores = {}
 
-        # Score dense results
-        for rank, doc in enumerate(dense_results):
-            key = (doc.page_content, doc.metadata.get('document_id', ''), doc.metadata.get('page_num', 0))
-            doc_scores[key] = {'doc': doc, 'score': 1 / (k + rank + 1)}
+        # Process each ranked list
+        for ranked_list in all_results:
+            # Create unique document identifier for each document
+            for rank, doc in enumerate(ranked_list):
+                key = (doc.page_content, doc.metadata.get('document_id', ''), doc.metadata.get('page_num', 0))
 
-        # Score sparse results
-        for rank, doc in enumerate(sparse_results):
-            key = (doc.page_content, doc.metadata.get('document_id', ''), doc.metadata.get('page_num', 0))
-            if key in doc_scores:
-                doc_scores[key]['score'] += 1 / (k + rank + 1)
-            else:
-                doc_scores[key] = {'doc': doc, 'score': 1 / (k + rank + 1)}
+                # Initialize score if we haven't seen this document
+                if key not in doc_scores:
+                    doc_scores[key] = {
+                        'doc': doc,
+                        'score': 0
+                    }
+
+                # Add RRF score from this ranked list
+                doc_scores[key]['score'] += 1 / (k + rank)
 
         # Sort by final scores
         sorted_docs = sorted(doc_scores.values(), key=lambda x: x['score'], reverse=True)
 
-        # Return Documents
         return [item['doc'] for item in sorted_docs]
 
     def _deduplicate_results(self, results: List[Document]) -> List[Document]:
