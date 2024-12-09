@@ -191,6 +191,97 @@ flowchart TB
     class Context,ImgRef,Citation,Answer,Confidence quinary
 ```
 
+### Document Upload Sequence Diagram
+```mermaid
+sequenceDiagram
+    participant Client
+    participant StorageService
+    participant DocProcessor
+    participant RAGService
+    participant LLMProvider
+    participant ChromaDB
+    participant FileSystem
+    participant Database
+
+    note over Client,Database: Document Upload Flow
+
+    Client->>+StorageService: upload(file, modelConfig)
+    StorageService->>FileSystem: Save PDF
+    StorageService->>+DocProcessor: process_pdf()
+    DocProcessor->>DocProcessor: extract_images()
+    DocProcessor->>DocProcessor: process_text()
+    DocProcessor->>FileSystem: save_images()
+    DocProcessor-->>-StorageService: sections
+
+    StorageService->>+RAGService: process_document()
+    
+    par Process with Each Provider
+        RAGService->>+LLMProvider: generate_embeddings()
+        LLMProvider-->>-RAGService: embeddings
+        RAGService->>ChromaDB: store_embeddings()
+    end
+
+    RAGService->>RAGService: setup_bm25_index()
+    RAGService-->>-StorageService: success
+
+    StorageService->>Database: save_file_metadata()
+    StorageService-->>-Client: FileMetadata
+```
+
+### Query Processing Sequence Diagram
+```mermaid
+sequenceDiagram
+    participant Client
+    participant RAGService
+    participant LLMProvider
+    participant ChromaDB
+    participant BM25
+
+    note over Client,BM25: Query Processing Flow
+    
+    Client->>+RAGService: query(text, fileIds, modelConfig, chatHistory)
+    
+    alt Has Chat History
+        RAGService->>+LLMProvider: rephrase_query_with_context()
+        LLMProvider-->>-RAGService: rephrased_query
+        Note right of RAGService: Updates query if chat history exists
+    end
+    
+    par Parallel Analysis Phase
+        RAGService->>+LLMProvider: analyze_query()
+        LLMProvider-->>-RAGService: query_analysis
+        
+        RAGService->>+LLMProvider: generate_step_back_query()
+        LLMProvider-->>-RAGService: broader_query
+    end
+    
+    RAGService->>RAGService: prepare_all_queries()
+    Note right of RAGService: Combines: [original, broader, sub-queries]
+    
+    par Parallel Search Preparation
+        RAGService->>+LLMProvider: get_embeddings_batch(all_queries)
+        LLMProvider-->>-RAGService: all_embeddings
+        
+        RAGService->>BM25: sparse_search(all_queries)
+        Note right of BM25: CPU-bound task runs in thread
+        BM25-->>RAGService: all_sparse_results
+    end
+    
+    RAGService->>ChromaDB: query_batch(all_embeddings)
+    ChromaDB-->>RAGService: all_dense_results
+    
+    RAGService->>RAGService: reciprocal_rank_fusion()
+    Note right of RAGService: Combines dense and sparse results
+    
+    
+    RAGService->>RAGService: deduplicate_results()
+    
+    RAGService->>+LLMProvider: generate_answer()
+    Note right of LLMProvider: Creates answer with citations and images
+    LLMProvider-->>-RAGService: formatted_response
+    
+    RAGService-->>-Client: RAGResponse
+```
 
 ## Detailed Features
 
