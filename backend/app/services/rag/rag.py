@@ -214,7 +214,7 @@ class RAGService:
                 all_results.extend(combined)
 
             # 7. Deduplicate while preserving most relevant results
-            final_results = self._deduplicate_results(all_results)[:15]
+            final_results = self._deduplicate_results(all_results)[:10]
 
             # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)

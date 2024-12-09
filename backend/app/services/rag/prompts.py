@@ -2,32 +2,31 @@
 from typing import Final
 
 
-CHAT_CONTEXT_ANALYSIS_PROMPT: Final = """Analyze the following chat history and the current query to create a comprehensive, specific query that captures the user's true intention.
+CHAT_CONTEXT_ANALYSIS_PROMPT: Final = """Analysieren Sie den folgenden Chatverlauf und die aktuelle Anfrage, um eine umfassende, spezifische Anfrage zu erstellen, die die wahre Absicht des Benutzers erfasst.
 
-Chat History:
-{chat_history}
+Chatverlauf: {chat_history}
 
-Current Query: "{current_query}"
+Aktuelle Anfrage: "{current_query}"
 
-Instructions:
-1. Consider the entire conversation flow and context
-2. Identify implicit references to previous messages
-3. Resolve any pronouns or contextual references
-4. Incorporate relevant details from previous exchanges
-5. Create a self-contained query that would work without requiring chat history
+Anweisungen:
+1. Berücksichtigen Sie den gesamten Gesprächsfluss und Kontext
+2. Identifizieren Sie implizite Verweise auf vorherige Nachrichten
+3. Lösen Sie Pronomen und kontextbezogene Verweise auf
+4. Integrieren Sie relevante Details aus vorherigen Gesprächen
+5. Erstellen Sie eine eigenständige Anfrage, die ohne Chatverlauf funktioniert
 
-Format your response as a clear, detailed query that directly addresses the user's intention. The response should be a single query without explanations or additional text.
+Formulieren Sie Ihre Antwort als klare, detaillierte Anfrage, die die Absicht des Benutzers direkt adressiert. Die Antwort sollte eine einzelne Anfrage ohne Erklärungen oder zusätzlichen Text sein.
 
-Example:
-Chat History:
-User: "What are the key features of the new product?"
-Assistant: "The product has AI capabilities, cloud integration, and real-time analytics."
-User: "How does that compare to competitors?"
+Beispiel:
+Chatverlauf:
+Benutzer: "Was sind die Hauptfunktionen des neuen Produkts?"
+Assistent: "Das Produkt verfügt über KI-Funktionen, Cloud-Integration und Echtzeit-Analytik."
+Benutzer: "Wie verhält sich das im Vergleich zur Konkurrenz?"
 
-Bad Response: "How do the AI, cloud, and analytics features compare to competitors?"
-Good Response: "What is a detailed comparison of [Product Name]'s AI capabilities, cloud integration, and real-time analytics features against its main competitors in the market?"
+Schlechte Antwort: "Wie vergleichen sich die KI-, Cloud- und Analytik-Funktionen mit der Konkurrenz?"
+Gute Antwort: "Welche detaillierten Unterschiede bestehen zwischen den KI-Funktionen, der Cloud-Integration und der Echtzeit-Analytik von [Produktname] im Vergleich zu den wichtigsten Wettbewerbern am Markt?"
 
-Now, rephrase the current query with full context:"""
+Formulieren Sie nun die aktuelle Anfrage mit vollständigem Kontext neu:"""
 
 # Prompt für die Analyse und Aufschlüsselung von Anfragen in Teilanfragen
 QUERY_ANALYSIS_PROMPT: Final = """Analysieren Sie diese Anfrage und unterteilen Sie sie in Teilanfragen.
@@ -78,6 +77,7 @@ Zitierrichtlinien:
 - Diese Platzhalter werden später durch klickbare Links ersetzt - achten Sie auf präzise Platzierung
 - Bei mehreren Quellen zur gleichen Information, kombinieren Sie diese: [Doc: ID1, Page X] [Doc: ID2, Page Y]
 - Für Bildverweise nutzen Sie [Bild X] für das Bild selbst und (Abbildung X) für die Bildunterschrift - diese werden später durch die tatsächlichen Bilder bzw. Bildunterschriften ersetzt
+  • X entspricht dabei dem Bild-Identifier aus dem jeweiligen Chunk
 
 Beispiele für natürliche Integration:
 ✓ "Die Analyse zeigt einen deutlichen Aufwärtstrend bei den Nutzerzahlen [Doc: dok123, Page 1], der sich besonders im zweiten Quartal beschleunigte [Doc: dok456, Page 3]."
