@@ -18,6 +18,7 @@ A sophisticated platform for developing and analyzing RAG (Retrieval-Augmented G
 - Hybrid search combining dense embeddings and BM25
 - Multi-stage query decomposition
 - Step-back prompting for broader context
+- Chat history-aware query rephrasing
 - Intelligent result reranking using reciprocal rank fusion
 
 ### Flexible Provider Architecture
@@ -48,6 +49,7 @@ flowchart TB
     subgraph Client["Client Interface"]
         Upload["Document Upload"]
         Query["User Query"]
+        History["Chat History"]
     end
 
     subgraph DocumentProcessing["Document Processing Pipeline"]
@@ -85,6 +87,7 @@ flowchart TB
     end
 
     subgraph QueryProcessing["Query Analysis"]
+        Rephrase["Query Rephrase"]
         Decomp["Query Decomposition"]
         StepBack["Step-Back Prompting"]
         SubQueries["Sub-Query Generation"]
@@ -104,30 +107,29 @@ flowchart TB
         Confidence["Confidence Score"]
     end
 
-    %% Document Processing Flow
+%% Document Processing Flow
     Upload --> PDFStore
     PDFStore --> PDF
     PDF --> ImgExtract
     PDF --> Hierarch
 
-    
-    %% Image Processing Flow
+%% Image Processing Flow
     ImgExtract --> Caption
     ImgExtract --> ImgStore
     Caption --> ImgAssoc
     ImgAssoc --> MetaStore
-    
-    %% Text Processing Flow
+
+%% Text Processing Flow
     Hierarch --> BBDetect
     BBDetect --> Layout
     Layout --> MetaStore
-    
-    %% Indexing Flow
+
+%% Indexing Flow
     Hierarch --> Embed
     Hierarch --> BM25
     Embed --> Store
-    
-    %% LLM Provider Connections
+
+%% LLM Provider Connections
     ChatGPT --> Embed
     Ollama --> Embed
     ChatGPT --> Answer
@@ -136,13 +138,19 @@ flowchart TB
     Ollama --> Decomp
     ChatGPT --> StepBack
     Ollama --> StepBack
-    
-    %% Query Processing Flow
-    Query --> Decomp
-    Query --> StepBack
+    ChatGPT --> Rephrase
+    Ollama --> Rephrase
+    ChatGPT --> SubQueries
+    Ollama --> SubQueries
+
+%% Query Processing Flow
+    Query --> Rephrase
+    History --> Rephrase
+    Rephrase --> Decomp
+    Rephrase --> StepBack
     Decomp --> SubQueries
-    
-    %% Retrieval Flow
+
+%% Retrieval Flow
     Store --> Dense
     BM25 --> Sparse
     SubQueries --> Dense
@@ -152,34 +160,34 @@ flowchart TB
     Dense --> RRF
     Sparse --> RRF
     RRF --> Context
-    
-    %% Response Generation Flow
+
+%% Response Generation Flow
     Context --> Citation
     MetaStore --> Citation
     ImgStore --> ImgRef
     MetaStore --> ImgRef
-    
+
     Context --> Answer
     ImgRef --> Answer
     Citation --> Answer
-    
-    %% Confidence generated alongside Answer
+
+%% Confidence generated alongside Answer
     Context --> Confidence
     Citation --> Confidence
     ImgRef --> Confidence
     Confidence --> Answer
 
-    %% Styling
+%% Styling
     classDef primary fill:#ffffff,stroke:#000000,color:#000000
     classDef secondary fill:#cccccc,stroke:#000000,color:#000000
     classDef tertiary fill:#999999,stroke:#000000,color:#000000
     classDef quaternary fill:#666666,stroke:#000000,color:#ffffff
     classDef quinary fill:#333333,stroke:#000000,color:#ffffff
-    
-    class Upload,Query primary
+
+    class Upload,Query,History primary
     class PDF,Extract,Chunk,ImageProcessing,TextProcessing secondary
     class VectorDB,SparseIndex,FileStore,LLMProviders tertiary
-    class Decomp,StepBack,SubQueries,Dense,Sparse,RRF quaternary
+    class Rephrase,Decomp,StepBack,SubQueries,Dense,Sparse,RRF quaternary
     class Context,ImgRef,Citation,Answer,Confidence quinary
 ```
 
@@ -194,6 +202,7 @@ flowchart TB
 
 
 ### Query Processing
+- **Chat History Analysis**: Rephrases queries based on conversation context
 - **Query Decomposition**: Breaks complex queries into manageable sub-queries
 - **Context Expansion**: Uses step-back prompting for broader understanding
 - **Multi-stage Retrieval**: Combines results from multiple retrieval strategies
