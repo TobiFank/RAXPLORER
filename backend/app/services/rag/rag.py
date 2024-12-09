@@ -11,15 +11,17 @@ from langchain.prompts import PromptTemplate
 from langchain_core.documents import Document
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from .document_processor import DocumentProcessor
-from .prompts import QUERY_ANALYSIS_PROMPT, STEP_BACK_PROMPT, ANSWER_GENERATION_PROMPT, NO_DOCUMENT_PROVIDED
+from .prompts import QUERY_ANALYSIS_PROMPT, STEP_BACK_PROMPT, ANSWER_GENERATION_PROMPT, NO_DOCUMENT_PROVIDED, \
+    CHAT_CONTEXT_ANALYSIS_PROMPT
 from .rag_dependencies import (
     ChromaProvider, BM25Retriever, DocumentSection
 )
 from ..llm import LLMService
 from ...core.config import Settings
-from ...db.models import FileModel
+from ...db.models import FileModel, ChatModel
 from ...schemas.model import ModelConfig, Provider
 from ...schemas.rag import RAGResponse, ImageReference, Citation
 
@@ -130,11 +132,18 @@ class RAGService:
             logger.error(f"Document processing failed: {str(e)}")
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, db) -> RAGResponse:
+    async def query(self, query: str, file_ids: List[str], model_config: ModelConfig, chat_history: List[dict] = None) -> RAGResponse:
         """Execute a RAG query and generate an answer"""
         try:
             if not file_ids:
                 return await self._handle_no_documents(query, model_config)
+
+            logger.debug(f"Initial query: {query}")
+
+            # Rephrase query with context if chat history exists
+            if chat_history:
+                query = await self._rephrase_query_with_context(chat_history, query, model_config)
+                logger.debug(f"Rephrased query: {query}")
 
             provider = await self.llm_service.get_provider(model_config)
 
@@ -205,7 +214,7 @@ class RAGService:
                 all_results.extend(combined)
 
             # 7. Deduplicate while preserving most relevant results
-            final_results = self._deduplicate_results(all_results)[:10]
+            final_results = self._deduplicate_results(all_results)[:15]
 
             # 8. Generate final answer
             return await self.generate_answer(query, final_results, model_config)
@@ -518,6 +527,29 @@ class RAGService:
 
         logger.debug(f"Found citations: {citations}")
         return citations
+
+    async def _rephrase_query_with_context(self, chat_history: list[dict], current_query: str, model_config: ModelConfig) -> str:
+        """Rephrase the query using chat history context"""
+        provider = await self.llm_service.get_provider(model_config)
+
+        # Format chat history
+        formatted_history = "\n".join([
+            f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+            for msg in chat_history
+        ])
+
+        prompt = CHAT_CONTEXT_ANALYSIS_PROMPT.format(
+            chat_history=formatted_history,
+            current_query=current_query
+        )
+
+        messages = [{"role": "user", "content": prompt}]
+
+        response = ""
+        async for chunk in provider.generate(messages, model_config):
+            response += chunk
+
+        return response.strip()
 
     def _process_citations(self, response: str, citations: List[Citation]) -> Tuple[str, str, List[str]]:
         """
