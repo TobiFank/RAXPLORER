@@ -99,6 +99,17 @@ class DocumentProcessor:
         finally:
             pdf_document.close()
 
+    def get_document_text(self, pdf_path: str) -> str:
+        pdf_document = fitz.open(pdf_path)
+        try:
+            full_text = ""
+            for page_num in range(len(pdf_document)):
+                page = pdf_document[page_num]
+                full_text += f"[Seite {page_num + 1}]\n{page.get_text()}\n"
+            return full_text
+        finally:
+            pdf_document.close()
+
     def _extract_images(self, pdf_document: fitz.Document, file_id: str) -> List[DocumentImage]:
         """Extract all visual elements from the document"""
         images = []

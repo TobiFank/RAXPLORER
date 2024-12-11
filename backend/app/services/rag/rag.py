@@ -13,6 +13,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from .contextual_retrieval import ContextualEnricher
 from .document_processor import DocumentProcessor
 from .prompts import QUERY_ANALYSIS_PROMPT, STEP_BACK_PROMPT, ANSWER_GENERATION_PROMPT, NO_DOCUMENT_PROVIDED, \
     CHAT_CONTEXT_ANALYSIS_PROMPT
@@ -46,6 +47,7 @@ class RAGService:
         self.chroma_provider = ChromaProvider()
         self.bm25_retriever = BM25Retriever()
         self.settings = Settings()
+        self.contextual_enricher = ContextualEnricher(llm_service)
 
         # Initialize prompt templates and parsers
         self.query_analyzer = PydanticOutputParser(pydantic_object=QueryAnalysis)
@@ -71,6 +73,7 @@ class RAGService:
             logger.info(f"Processing document {original_filename}")
 
             processor = DocumentProcessor()
+            full_text = processor.get_document_text(temp_pdf_path)
             sections = processor.process_pdf(temp_pdf_path, file_id, file_model.name)
 
             # Enhance section metadata with image relationships
@@ -100,7 +103,10 @@ class RAGService:
                     provider_config = self._create_provider_config(provider, model_config)
                     provider_service = await self.llm_service.get_provider(provider_config)
 
-                    embeddings = await self._generate_embeddings(sections, provider_service, provider_config)
+                    embeddings = await self._generate_embeddings(sections=sections,
+                                                                 full_text=full_text,
+                                                                 provider_service=provider_service,
+                                                                 provider_config=provider_config)
                     await self.chroma_provider.store_embeddings(
                         provider=provider,
                         sections=sections,
@@ -654,13 +660,23 @@ class RAGService:
             return bool(self.settings.OLLAMA_HOST)
         return False
 
-    async def _generate_embeddings(self, sections: List[DocumentSection],
-                                   provider_service, provider_config) -> List[List[float]]:
-        # Extract all texts first
-        texts = [section.content for section in sections]
-
+    async def _generate_embeddings(self,
+                                   sections: List[DocumentSection],
+                                   full_text: str,
+                                   provider_service,
+                                   provider_config) -> List[List[float]]:
         try:
-            # Check if provider supports batch processing
+            # Enrich sections with context
+            #sections = await self.contextual_enricher.enrich_sections(
+            #    sections,
+            #    full_text,
+            #    provider_config
+            #)
+
+            # Extract texts from enriched sections
+            texts = [section.content for section in sections]
+
+            # Generate embeddings using provider
             if hasattr(provider_service, 'get_embeddings_batch'):
                 return await provider_service.get_embeddings_batch(texts, provider_config)
             else:

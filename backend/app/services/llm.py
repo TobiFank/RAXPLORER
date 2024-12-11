@@ -205,7 +205,7 @@ class OllamaProvider:
                         "messages": messages,
                         "stream": True,
                         "options": {
-                            "num_ctx": 8192
+                            "num_ctx": 32000
                         }
                     },
                     timeout=None
