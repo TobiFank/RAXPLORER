@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import List, Optional
 
@@ -31,56 +32,65 @@ class ContextualEnricher:
             model_config: ModelConfig
     ) -> List[DocumentSection]:
         """
-        Enrich sections with contextual information using the configured LLM provider.
-
-        Args:
-            sections: List of document sections to enrich
-            full_text: The complete document text for context
-            model_config: Configuration for the LLM provider
-
-        Returns:
-            List of enriched document sections
+        Enrich sections with contextual information using the configured LLM provider in parallel.
         """
         try:
             provider = await self.llm_service.get_provider(model_config)
-            enriched_sections = []
 
-            for section in sections:
-                # Generate context for the section
-                prompt = CONTEXT_GENERATION_PROMPT.format(
-                    document_text=full_text,
-                    chunk_content=section.content
-                )
+            # Create tasks for all sections
+            enrichment_tasks = [
+                self._enrich_single_section(section, full_text, provider, model_config)
+                for section in sections
+            ]
 
-                messages = [{"role": "user", "content": prompt}]
-                context = ""
-
-                # Get context from provider
-                async for chunk in provider.generate(messages, model_config):
-                    context += chunk
-
-                # Create new enriched section
-                enriched_section = DocumentSection(
-                    content=f"{context.strip()}\n\n{section.content}",
-                    bbox=section.bbox,
-                    section_type=section.section_type,
-                    metadata=section.metadata
-                )
-
-                logger.debug(f"Enriched section content: {enriched_section.content}")
-
-                # Copy over any existing relationships and images
-                enriched_section.images = section.images
-                enriched_section.nearby_sections = section.nearby_sections
-
-                enriched_sections.append(enriched_section)
-
+            # Run all enrichment tasks in parallel
+            enriched_sections = await asyncio.gather(*enrichment_tasks)
             return enriched_sections
 
         except Exception as e:
             logger.error(f"Error enriching sections: {str(e)}")
             # If enrichment fails, return original sections
             return sections
+
+    async def _enrich_single_section(
+            self,
+            section: DocumentSection,
+            full_text: str,
+            provider: any,
+            model_config: ModelConfig
+    ) -> DocumentSection:
+        """Enrich a single section"""
+        try:
+            # Generate context for the section
+            prompt = CONTEXT_GENERATION_PROMPT.format(
+                document_text=full_text,
+                chunk_content=section.content
+            )
+
+            messages = [{"role": "user", "content": prompt}]
+            context = ""
+
+            # Get context from provider
+            async for chunk in provider.generate(messages, model_config):
+                context += chunk
+
+            # Create new enriched section
+            enriched_section = DocumentSection(
+                content=f"{context.strip()}\n\n{section.content}",
+                bbox=section.bbox,
+                section_type=section.section_type,
+                metadata=section.metadata
+            )
+
+            # Copy over any existing relationships and images
+            enriched_section.images = section.images
+            enriched_section.nearby_sections = section.nearby_sections
+
+            return enriched_section
+
+        except Exception as e:
+            logger.error(f"Error enriching single section: {str(e)}")
+            return section
 
     async def _get_cached_provider(self, provider_type: Provider) -> Optional[any]:
         """Get cached provider instance if available"""
